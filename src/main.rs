@@ -400,11 +400,31 @@ const NAMED_PALETTES: &[(&str, &str, &str, &str, &str)] = &[
 
 
 // ---------------------------------------------------------------------
-// Help & color list (colorized)
+// Version, Banner, Help, Color List
 // ---------------------------------------------------------------------
 
+const VERSION: &str = "0.1.0";
+
+// Category boundaries for --list-colors grouping.
+const CATEGORIES: &[(&str, usize, usize)] = &[
+    ("Originals",    0,   103),
+    ("Reds",         103, 119),
+    ("Oranges",      119, 135),
+    ("Yellows",      135, 151),
+    ("Greens",       151, 168),
+    ("Teals & Cyan", 168, 185),
+    ("Blues",        185, 202),
+    ("Violets",      202, 219),
+    ("Magentas",     219, 236),
+    ("Earth Tones",  236, 253),
+    ("Grays",        253, 263),
+    ("Jewels",       263, 273),
+    ("Cosmic",       273, 283),
+    ("Food & Fun",   283, 293),
+    ("Misc",         293, 301),
+];
+
 fn print_banner() {
-    // A short fire-colored ASCII logo rendered with real ANSI RGB.
     let lines = [
         "  ██████╗ ██╗   ██╗██████╗  ██████╗  ██████╗██╗     ███████╗ █████╗ ██████╗ ",
         "  ██╔══██╗╚██╗ ██╔╝██╔══██╗██╔═══██╗██╔════╝██║     ██╔════╝██╔══██╗██╔══██╗",
@@ -413,36 +433,157 @@ fn print_banner() {
         "  ██║        ██║   ██║  ██║╚██████╔╝╚██████╗███████╗███████╗██║  ██║██║  ██║",
         "  ╚═╝        ╚═╝   ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝",
     ];
-    // Gradient from deep red at top to bright orange at bottom
     let colors: [(u8, u8, u8); 6] = [
-        (180, 10, 0), (210, 30, 0), (230, 60, 0),
-        (240, 100, 0), (250, 160, 10), (255, 200, 30),
+        (200,  8,   0),
+        (228,  45,  0),
+        (246,  90,  0),
+        (252, 140,  5),
+        (255, 185, 18),
+        (255, 225, 48),
     ];
     for (line, &(r, g, b)) in lines.iter().zip(colors.iter()) {
         println!("{ESC}[38;2;{r};{g};{b}m{line}{ESC}[0m");
+    }
+    let n = NAMED_PALETTES.len();
+    println!(
+        "  {ESC}[38;2;85;85;108mv{VERSION}  \
+         {ESC}[38;2;55;55;75m·  \
+         {ESC}[38;2;85;85;108m{n} palettes  \
+         {ESC}[38;2;55;55;75m·  \
+         {ESC}[38;2;65;65;88mWatch your terminal go up in flames!{ESC}[0m"
+    );
+    println!();
+}
+
+fn print_version() {
+    print_banner();
+    let n = NAMED_PALETTES.len();
+    println!("  {ESC}[38;2;130;130;155mVersion   {ESC}[1;38;2;255;220;80m{VERSION}{ESC}[0m");
+    println!("  {ESC}[38;2;130;130;155mPalettes  {ESC}[1;38;2;255;220;80m{n}{ESC}[0m");
+    println!("  {ESC}[38;2;130;130;155mLicense   {ESC}[38;2;110;110;135mMIT{ESC}[0m");
+    println!();
+}
+
+fn print_info() {
+    let choice = load_config().unwrap_or(PaletteChoice::Named("fire".to_string()));
+    print_banner();
+    println!("  {ESC}[1;38;2;255;200;80mActive Palette{ESC}[0m\n");
+    match &choice {
+        PaletteChoice::Named(name) => {
+            if let Some((id, display, desc, from_hex, to_hex)) =
+                NAMED_PALETTES.iter().find(|(i, _, _, _, _)| *i == name.as_str())
+            {
+                let from = hex_to_rgb(from_hex).unwrap_or((0, 0, 0));
+                let to   = hex_to_rgb(to_hex).unwrap_or((255, 255, 255));
+                let p = if *id == "fire" {
+                    soften(&FIRE_PALETTE, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
+                } else {
+                    soften(&generate_palette(from, to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
+                };
+                let sw = palette_swatch(&p, 44);
+                println!("  {ESC}[1;38;2;255;255;255m{display}{ESC}[0m  {ESC}[38;2;75;75;95m({id}){ESC}[0m");
+                println!("  {sw}\n");
+                println!("  {ESC}[38;2;160;160;185m{desc}{ESC}[0m");
+                println!(
+                    "  {ESC}[38;2;95;95;118mFrom{ESC}[0m  {ESC}[38;2;195;195;215m{from_hex}  \
+                     {ESC}[38;2;95;95;118mTo{ESC}[0m  {ESC}[38;2;195;195;215m{to_hex}{ESC}[0m"
+                );
+            } else {
+                println!("  {ESC}[38;2;195;195;215m{name}{ESC}[0m {ESC}[38;2;95;95;118m(no info){ESC}[0m");
+            }
+        }
+        PaletteChoice::Custom { from, to } => {
+            let fh = format!("#{:02x}{:02x}{:02x}", from.0, from.1, from.2);
+            let th = format!("#{:02x}{:02x}{:02x}", to.0,   to.1,   to.2);
+            let p  = soften(&generate_palette(*from, *to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN);
+            let sw = palette_swatch(&p, 44);
+            println!("  {ESC}[1;38;2;255;255;255mCustom gradient{ESC}[0m");
+            println!("  {sw}\n");
+            println!(
+                "  {ESC}[38;2;95;95;118mFrom{ESC}[0m  {ESC}[38;2;195;195;215m{fh}  \
+                 {ESC}[38;2;95;95;118mTo{ESC}[0m  {ESC}[38;2;195;195;215m{th}{ESC}[0m"
+            );
+        }
     }
     println!();
 }
 
 fn print_help() {
+    fn sec(title: &str) {
+        println!("\n  {ESC}[1;38;2;255;200;80m{title}{ESC}[0m");
+        println!("  {ESC}[38;2;45;45;65m{}{ESC}[0m", "─".repeat(60));
+    }
+
     print_banner();
-    println!("{ESC}[1;37mUSAGE{ESC}[0m");
-    println!("    pyroclear [OPTIONS]\n");
-    println!("{ESC}[1;37mOPTIONS{ESC}[0m");
-    println!("    {ESC}[38;2;255;160;40m--color{ESC}[0m {ESC}[38;2;200;200;200m<name>{ESC}[0m          Named palette (see --list-colors)");
-    println!("    {ESC}[38;2;255;160;40m--pick{ESC}[0m, {ESC}[38;2;255;160;40m-p{ESC}[0m              Interactive TUI color picker");
-    println!("    {ESC}[38;2;255;160;40m--from{ESC}[0m {ESC}[38;2;200;200;200m<hex>{ESC}[0m {ESC}[38;2;255;160;40m--to{ESC}[0m {ESC}[38;2;200;200;200m<hex>{ESC}[0m  Custom gradient, e.g. --from \"#1a0000\" --to \"#ffcc00\"");
-    println!("    {ESC}[38;2;255;160;40m--list-colors{ESC}[0m           List palettes with live color swatches");
-    println!("    {ESC}[38;2;255;160;40m-h{ESC}[0m, {ESC}[38;2;255;160;40m--help{ESC}[0m             Show this help\n");
-    println!("{ESC}[38;2;150;150;150mYour choice is saved to ~/.config/pyroclear/config.toml{ESC}[0m");
-    println!("{ESC}[38;2;150;150;150mand reused automatically next time you run pyroclear with no flags.{ESC}[0m");
+    let n = NAMED_PALETTES.len();
+
+    sec("USAGE");
+    println!("    {ESC}[38;2;200;200;220mpyroclear {ESC}[38;2;130;130;155m[OPTIONS]{ESC}[0m");
+    println!("    {ESC}[38;2;82;82;105m(no flags: burn with the saved palette, default is fire){ESC}[0m");
+
+    sec("MODES");
+    let modes: &[(&str, &str)] = &[
+        ("--color <name>",            "Named palette  (saved for future runs)"),
+        ("--from <hex> --to <hex>",   "Custom gradient (saved for future runs)"),
+        ("--pick,   -p",              "Interactive TUI color picker"),
+        ("--random, -r",              "Random palette — different every run"),
+        ("--reset",                   "Reset to default (fire), then burn"),
+    ];
+    for (flag, desc) in modes {
+        println!(
+            "    {ESC}[38;2;255;165;45m{flag:<28}{ESC}[0m {ESC}[38;2;185;185;210m{desc}{ESC}[0m"
+        );
+    }
+
+    sec("DISCOVERY");
+    let list_desc = format!("Palette grid ({n} palettes) with live swatches");
+    let disc: &[(&str, &str)] = &[
+        ("--list-colors, --list",     list_desc.as_str()),
+        ("--info, -i",                "Info card for the currently active palette"),
+        ("--version, -V",             "Version and palette count"),
+        ("--help, -h",                "Show this help"),
+    ];
+    for (flag, desc) in disc {
+        println!(
+            "    {ESC}[38;2;255;165;45m{flag:<28}{ESC}[0m {ESC}[38;2;185;185;210m{desc}{ESC}[0m"
+        );
+    }
+
+    sec("OPTIONS");
+    println!(
+        "    {ESC}[38;2;255;165;45m--no-save{ESC}[0m  \
+         {ESC}[38;2;82;82;105m(combine with any mode){ESC}[0m  \
+         {ESC}[38;2;185;185;210mSkip writing the choice to config{ESC}[0m"
+    );
+
+    sec("EXAMPLES");
+    let ex: &[(&str, &str)] = &[
+        ("pyroclear",                                   "burn with saved / default palette"),
+        ("pyroclear --color ocean",                     "burn ocean & save it"),
+        ("pyroclear --random",                          "random palette each run"),
+        ("pyroclear --from \"#002080\" --to \"#00f0ff\"",   "custom gradient"),
+        ("pyroclear --pick",                            "interactive picker"),
+        ("pyroclear --color lava --no-save",            "one-off, no config change"),
+        ("pyroclear --info",                            "show active palette card"),
+        ("pyroclear --list-colors | less -R",           "browse all palettes"),
+    ];
+    for (cmd, note) in ex {
+        println!(
+            "    {ESC}[38;2;80;185;255m${ESC}[0m \
+             {ESC}[38;2;210;210;230m{cmd:<46}{ESC}[0m \
+             {ESC}[38;2;82;82;105m# {note}{ESC}[0m"
+        );
+    }
+
+    println!("\n  {ESC}[38;2;65;65;85mConfig: ~/.config/pyroclear/config.toml{ESC}[0m\n");
 }
 
 /// Render a gradient swatch of `width` cells between two colors.
 fn swatch(from: (u8, u8, u8), to: (u8, u8, u8), width: usize) -> String {
     let mut s = String::new();
+    if width == 0 { return s; }
     for i in 0..width {
-        let t = i as f32 / (width - 1) as f32;
+        let t = if width == 1 { 0.0 } else { i as f32 / (width - 1) as f32 };
         let r = (from.0 as f32 + t * (to.0 as f32 - from.0 as f32)).round() as u8;
         let g = (from.1 as f32 + t * (to.1 as f32 - from.1 as f32)).round() as u8;
         let b = (from.2 as f32 + t * (to.2 as f32 - from.2 as f32)).round() as u8;
@@ -454,9 +595,12 @@ fn swatch(from: (u8, u8, u8), to: (u8, u8, u8), width: usize) -> String {
 
 fn palette_swatch(palette: &Palette, width: usize) -> String {
     let mut s = String::new();
-    let step = 36.0 / (width - 1) as f32;
+    if width == 0 { return s; }
+    let step = if width == 1 { 0.0 } else { 36.0 / (width - 1) as f32 };
     for i in 0..width {
-        let idx = (i as f32 * step).round().clamp(1.0, 36.0) as usize;
+        let idx = if width == 1 { 18 } else {
+            (i as f32 * step).round().clamp(1.0, 36.0) as usize
+        };
         let (r, g, b) = palette[idx];
         s.push_str(&format!("{ESC}[48;2;{r};{g};{b}m "));
     }
@@ -464,28 +608,77 @@ fn palette_swatch(palette: &Palette, width: usize) -> String {
     s
 }
 
+/// Build and return a palette swatch for any named or custom entry.
+fn render_swatch(id: &str, from_hex: &str, to_hex: &str, width: usize) -> String {
+    if id == "fire" {
+        palette_swatch(&soften(&FIRE_PALETTE, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN), width)
+    } else {
+        let from = hex_to_rgb(from_hex).unwrap_or((0, 0, 0));
+        let to   = hex_to_rgb(to_hex).unwrap_or((255, 255, 255));
+        palette_swatch(
+            &soften(&generate_palette(from, to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN),
+            width,
+        )
+    }
+}
+
 fn print_color_list() {
     print_banner();
-    println!("{ESC}[1;37mAvailable palettes:{ESC}[0m\n");
+    let (cols, _) = terminal_size();
+    let n = NAMED_PALETTES.len();
+    let two_col = cols >= 132;
+    let id_w    = 18usize;
+    let sw_w    = if two_col { 20usize } else { 28usize };
 
-    for (id, display, desc, from_hex, to_hex) in NAMED_PALETTES {
-        let sw = if *id == "fire" {
-            let p = soften(&FIRE_PALETTE, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN);
-            palette_swatch(&p, 28)
-        } else {
-            let from = hex_to_rgb(from_hex).unwrap_or((0, 0, 0));
-            let to = hex_to_rgb(to_hex).unwrap_or((255, 255, 255));
-            // Build the full palette so the swatch matches what actually burns
-            let p = soften(&generate_palette(from, to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN);
-            palette_swatch(&p, 28)
-        };
+    let rule = "─".repeat(cols.saturating_sub(26));
+    println!("  {ESC}[1;38;2;255;200;80m{n} palettes available{ESC}[0m  {ESC}[38;2;45;45;65m{rule}{ESC}[0m\n");
+
+    for &(cat_name, start, end) in CATEGORIES {
+        let count = end - start;
+        let rl = cols.saturating_sub(cat_name.len() + 14);
         println!(
-            "  {ESC}[1;38;2;255;200;80m{id:<8}{ESC}[0m  {sw}  {ESC}[38;2;180;180;180m{desc}{ESC}[0m"
+            "  {ESC}[38;2;255;160;35m▸ {cat_name}{ESC}[0m  \
+             {ESC}[38;2;55;55;75m{count:>3} ╌{}{ESC}[0m",
+            "╌".repeat(rl)
         );
-        let _ = display; // used in picker, suppress unused warning
+
+        let palettes = &NAMED_PALETTES[start..end];
+
+        if two_col {
+            let half = (count + 1) / 2;
+            for row in 0..half {
+                let (id_l, _, _, from_l, to_l) = palettes[row];
+                let sw_l = render_swatch(id_l, from_l, to_l, sw_w);
+                print!(
+                    "  {ESC}[1;38;2;255;225;100m{id_l:<id_w$}{ESC}[0m {sw_l} \
+                     {ESC}[38;2;90;90;112m{from_l}{ESC}[38;2;50;50;70m→{ESC}[38;2;90;90;112m{to_l}{ESC}[0m"
+                );
+                let right = row + half;
+                if right < count {
+                    let (id_r, _, _, from_r, to_r) = palettes[right];
+                    let sw_r = render_swatch(id_r, from_r, to_r, sw_w);
+                    print!(
+                        "    {ESC}[1;38;2;255;225;100m{id_r:<id_w$}{ESC}[0m {sw_r} \
+                         {ESC}[38;2;90;90;112m{from_r}{ESC}[38;2;50;50;70m→{ESC}[38;2;90;90;112m{to_r}{ESC}[0m"
+                    );
+                }
+                println!();
+            }
+        } else {
+            for (id, _, desc, from_hex, to_hex) in palettes {
+                let sw = render_swatch(id, from_hex, to_hex, sw_w);
+                println!(
+                    "  {ESC}[1;38;2;255;225;100m{id:<id_w$}{ESC}[0m {sw}  \
+                     {ESC}[38;2;125;125;148m{desc}{ESC}[0m"
+                );
+            }
+        }
+        println!();
     }
-    println!("\n{ESC}[38;2;150;150;150mCustom gradient: pyroclear --from \"#rrggbb\" --to \"#rrggbb\"{ESC}[0m");
-    println!("{ESC}[38;2;150;150;150mInteractive:     pyroclear --pick{ESC}[0m");
+
+    println!("  {ESC}[38;2;75;75;95m╌╌ Custom:      pyroclear --from \"#rrggbb\" --to \"#rrggbb\"{ESC}[0m");
+    println!("  {ESC}[38;2;75;75;95m╌╌ Interactive: pyroclear --pick{ESC}[0m");
+    println!("  {ESC}[38;2;75;75;95m╌╌ Random:      pyroclear --random{ESC}[0m\n");
 }
 
 // ---------------------------------------------------------------------
@@ -663,20 +856,30 @@ fn validate_named(name: &str) -> Result<(), String> {
     if NAMED_PALETTES.iter().any(|(id, _, _, _, _)| *id == name) {
         Ok(())
     } else {
-        let valid: Vec<&str> = NAMED_PALETTES.iter().map(|(id, _, _, _, _)| *id).collect();
-        Err(format!(
-            "Unknown palette '{name}'. Valid names: {}\nTry --list-colors or --pick for an interactive selector.",
-            valid.join(", ")
-        ))
+        Err(format!("Unknown palette '{name}'"))
     }
 }
 
-/// Parses CLI flags. Returns Some(choice) if the user passed color flags.
+/// Returns true if `--no-save` was passed on the command line.
+fn has_no_save() -> bool {
+    std::env::args().any(|a| a == "--no-save")
+}
+
+/// Pick a random named palette.
+fn random_palette_choice() -> PaletteChoice {
+    let mut rng = Rng::new();
+    let idx = (rng.next_u64() % NAMED_PALETTES.len() as u64) as usize;
+    let (id, _, _, _, _) = NAMED_PALETTES[idx];
+    PaletteChoice::Named(id.to_string())
+}
+
+/// Parses CLI flags. Returns Some(choice) when the user picked a palette.
+/// Does NOT call save_config — that is resolve_choice's responsibility.
 fn parse_args() -> Option<PaletteChoice> {
     let args: Vec<String> = std::env::args().collect();
     let mut color = None;
-    let mut from = None;
-    let mut to = None;
+    let mut from  = None;
+    let mut to    = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -698,19 +901,48 @@ fn parse_args() -> Option<PaletteChoice> {
                 std::process::exit(0);
             }
             "--pick" | "-p" => {
-                let picked = interactive_pick();
-                match picked {
-                    Some(c) => {
-                        save_config(&c);
-                        return Some(c);
-                    }
-                    None => std::process::exit(0),
+                match interactive_pick() {
+                    Some(c) => return Some(c),
+                    None    => std::process::exit(0),
                 }
+            }
+            "--random" | "-r" => {
+                let c = random_palette_choice();
+                if let PaletteChoice::Named(ref name) = c {
+                    if let Some((_, display, _, _, _)) =
+                        NAMED_PALETTES.iter().find(|(id, _, _, _, _)| *id == name.as_str())
+                    {
+                        eprintln!(
+                            "  {ESC}[38;2;255;200;80m◆ Random:{ESC}[0m \
+                             {ESC}[1;38;2;255;255;255m{display}{ESC}[0m  \
+                             {ESC}[38;2;95;95;115m({name}){ESC}[0m"
+                        );
+                    }
+                }
+                return Some(c);
+            }
+            "--reset" => {
+                let c = PaletteChoice::Named("fire".to_string());
+                save_config(&c); // reset always writes, even with --no-save
+                eprintln!(
+                    "  {ESC}[38;2;255;200;80m◆ Reset:{ESC}[0m \
+                     {ESC}[38;2;195;195;215mpalette reset to default (fire){ESC}[0m"
+                );
+                return Some(c);
+            }
+            "--info" | "-i" => {
+                print_info();
+                std::process::exit(0);
+            }
+            "--version" | "-V" => {
+                print_version();
+                std::process::exit(0);
             }
             "-h" | "--help" => {
                 print_help();
                 std::process::exit(0);
             }
+            "--no-save" => {} // detected separately via has_no_save()
             _ => {}
         }
         i += 1;
@@ -718,11 +950,17 @@ fn parse_args() -> Option<PaletteChoice> {
 
     if from.is_some() || to.is_some() {
         let (Some(f), Some(t)) = (from, to) else {
-            eprintln!("{ESC}[1;31merror:{ESC}[0m --from and --to must be used together, e.g.\n  pyroclear --from \"#1a0000\" --to \"#ffcc00\"");
+            eprintln!(
+                "{ESC}[1;38;2;255;70;70m✗ error:{ESC}[0m --from and --to must be used together\n\
+                 {ESC}[38;2;95;95;115m  tip: pyroclear --from \"#1a0000\" --to \"#ffcc00\"{ESC}[0m"
+            );
             std::process::exit(1);
         };
         let (Some(fc), Some(tc)) = (hex_to_rgb(&f), hex_to_rgb(&t)) else {
-            eprintln!("{ESC}[1;31merror:{ESC}[0m Invalid hex color(s) — expected format #rrggbb");
+            eprintln!(
+                "{ESC}[1;38;2;255;70;70m✗ error:{ESC}[0m Invalid hex color — expected format #rrggbb\n\
+                 {ESC}[38;2;95;95;115m  tip: e.g. --from \"#ff0000\" --to \"#ffffff\"{ESC}[0m"
+            );
             std::process::exit(1);
         };
         return Some(PaletteChoice::Custom { from: fc, to: tc });
@@ -730,7 +968,10 @@ fn parse_args() -> Option<PaletteChoice> {
 
     if let Some(name) = color {
         if let Err(e) = validate_named(&name) {
-            eprintln!("{ESC}[1;31merror:{ESC}[0m {e}");
+            eprintln!(
+                "{ESC}[1;38;2;255;70;70m✗ error:{ESC}[0m {e}\n\
+                 {ESC}[38;2;95;95;115m  tip: run --list-colors or --pick to browse all palettes{ESC}[0m"
+            );
             std::process::exit(1);
         }
         return Some(PaletteChoice::Named(name));
@@ -741,7 +982,9 @@ fn parse_args() -> Option<PaletteChoice> {
 
 fn resolve_choice() -> PaletteChoice {
     if let Some(choice) = parse_args() {
-        save_config(&choice);
+        if !has_no_save() {
+            save_config(&choice);
+        }
         return choice;
     }
     load_config().unwrap_or(PaletteChoice::Named("fire".to_string()))
@@ -817,6 +1060,10 @@ impl Drop for TermRawGuard {
 enum Key {
     Up,
     Down,
+    Left,
+    Right,
+    PageUp,
+    PageDown,
     Enter,
     Char(char),
     Esc,
@@ -825,14 +1072,18 @@ enum Key {
 }
 
 fn read_key() -> Key {
-    let mut buf = [0u8; 4];
-    let n = unsafe { libc::read(libc::STDIN_FILENO, buf.as_mut_ptr() as *mut _, 4) };
+    let mut buf = [0u8; 6];
+    let n = unsafe { libc::read(libc::STDIN_FILENO, buf.as_mut_ptr() as *mut _, 6) };
     if n <= 0 {
         return Key::Other;
     }
     match &buf[..n as usize] {
         [0x1b, b'[', b'A', ..] => Key::Up,
         [0x1b, b'[', b'B', ..] => Key::Down,
+        [0x1b, b'[', b'C', ..] => Key::Right,
+        [0x1b, b'[', b'D', ..] => Key::Left,
+        [0x1b, b'[', b'5', b'~', ..] => Key::PageUp,
+        [0x1b, b'[', b'6', b'~', ..] => Key::PageDown,
         [0x1b, ..] if n == 1 => Key::Esc,
         [0x0d] | [0x0a] => Key::Enter,
         [0x7f] | [0x08] => Key::Backspace,
@@ -845,109 +1096,209 @@ fn read_key() -> Key {
 fn prompt_hex(label: &str, row: u16) -> Option<String> {
     let mut input = String::new();
     loop {
-        // Clear row and redraw prompt
         print!("{ESC}[{row};1H{ESC}[2K{ESC}[38;2;255;200;80m{label}{ESC}[0m {input}_");
         io::stdout().flush().ok();
         match read_key() {
             Key::Enter => {
                 let s = input.trim().to_string();
-                if s.is_empty() {
-                    return None;
-                }
-                if hex_to_rgb(&s).is_some() {
-                    return Some(s);
-                }
-                // Invalid — flash an error hint
-                print!("{ESC}[{row};1H{ESC}[2K{ESC}[38;2;255;60;60m  ✗ invalid hex (need #rrggbb){ESC}[0m");
+                if s.is_empty() { return None; }
+                if hex_to_rgb(&s).is_some() { return Some(s); }
+                print!(
+                    "{ESC}[{row};1H{ESC}[2K\
+                     {ESC}[38;2;255;70;70m  ✗ invalid hex — need #rrggbb{ESC}[0m"
+                );
                 io::stdout().flush().ok();
                 std::thread::sleep(Duration::from_millis(800));
                 input.clear();
             }
-            Key::Backspace => {
-                input.pop();
-            }
-            Key::Char(c) => {
-                if input.len() < 7 {
-                    input.push(c);
-                }
-            }
-            Key::Esc => return None,
-            _ => {}
+            Key::Backspace => { input.pop(); }
+            Key::Char(c)   => { if input.len() < 7 { input.push(c); } }
+            Key::Esc       => return None,
+            _              => {}
         }
     }
 }
 
-/// Draw the picker UI at the current terminal size.
-fn draw_picker(selected: usize, (cols, rows): (usize, usize)) {
-    let total = NAMED_PALETTES.len() + 1; // +1 for "Custom"
-    let swatch_w = (cols.saturating_sub(30)).clamp(12, 36);
+/// Truncate to at most `max_chars` display characters (Unicode-safe).
+fn truncate_display(s: &str, max_chars: usize) -> &str {
+    if max_chars == 0 { return ""; }
+    let mut n = 0usize;
+    for (byte_idx, _) in s.char_indices() {
+        if n >= max_chars { return &s[..byte_idx]; }
+        n += 1;
+    }
+    s
+}
 
-    // Title bar
-    print!("{ESC}[H");
-    let title = " pyroclear — color picker ";
-    let hint = " [↑↓] navigate  [Enter] select  [q/Esc] cancel ";
-    let gap = cols.saturating_sub(title.len() + hint.len());
+/// Build a filtered list of NAMED_PALETTES indices matching `search`.
+/// Index == NAMED_PALETTES.len() is the "Custom" sentinel.
+fn apply_filter(search: &str) -> Vec<usize> {
+    let s = search.to_lowercase();
+    if s.is_empty() {
+        let mut v: Vec<usize> = (0..NAMED_PALETTES.len()).collect();
+        v.push(NAMED_PALETTES.len());
+        return v;
+    }
+    let mut v: Vec<usize> = NAMED_PALETTES
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| {
+            let (id, display, desc, _, _) = entry;
+            id.to_lowercase().contains(s.as_str())
+                || display.to_lowercase().contains(s.as_str())
+                || desc.to_lowercase().contains(s.as_str())
+        })
+        .map(|(i, _)| i)
+        .collect();
+    if "custom".contains(s.as_str()) {
+        v.push(NAMED_PALETTES.len());
+    }
+    v
+}
+
+/// Draw the full picker UI.
+fn draw_picker(
+    selected: usize,
+    filter: &[usize],
+    search: &str,
+    search_active: bool,
+    (cols, rows): (usize, usize),
+) {
+    let sw_w = (cols.saturating_sub(50)).clamp(10, 30);
+
+    // ── Row 1: title bar ──────────────────────────────────────────────
+    print!("{ESC}[1;1H");
+    let title = " pyroclear  ◆  color picker ";
+    let gap = cols.saturating_sub(title.len());
     print!(
-        "{ESC}[48;2;30;30;50m{ESC}[38;2;255;200;80m{title}{ESC}[38;2;140;140;160m{}{hint}{ESC}[0m",
+        "{ESC}[48;2;20;20;36m{ESC}[38;2;255;200;80m{title}\
+         {ESC}[38;2;50;50;72m{}{ESC}[0m",
         " ".repeat(gap)
     );
 
-    // Palette rows
+    // ── Row 2: search bar ─────────────────────────────────────────────
+    print!("{ESC}[2;1H{ESC}[2K");
+    let match_count = filter.iter().filter(|&&i| i < NAMED_PALETTES.len()).count();
+    if search.is_empty() && !search_active {
+        print!(
+            "  {ESC}[38;2;55;55;78m/{ESC}[0m \
+             {ESC}[38;2;52;52;72msearch palettes...{ESC}[0m  \
+             {ESC}[38;2;52;52;72m{match_count} palettes{ESC}[0m"
+        );
+    } else {
+        let caret = if search_active { "_" } else { "" };
+        let col   = if search_active { "255;220;80" } else { "150;150;180" };
+        print!(
+            "  {ESC}[38;2;{col}m/{search}{caret}{ESC}[0m  \
+             {ESC}[38;2;95;95;115m{match_count} match{}{ESC}[0m",
+            if match_count == 1 { "" } else { "es" }
+        );
+    }
+
+    // ── Palette list ───────────────────────────────────────────────────
     let list_start = 2usize;
-    let visible = rows.saturating_sub(list_start + 2); // leave bottom margin
-    let offset = if selected >= visible { selected - visible + 1 } else { 0 };
+    let list_end   = rows.saturating_sub(4);
+    let visible    = list_end.saturating_sub(list_start);
+    let offset     = if selected >= visible { selected - visible + 1 } else { 0 };
 
     for slot in 0..visible {
-        let idx = slot + offset;
+        let fi_pos = slot + offset;
         let row = (list_start + slot + 1) as u16;
         print!("{ESC}[{row};1H{ESC}[2K");
+        if fi_pos >= filter.len() { continue; }
 
-        if idx >= total {
-            break;
-        }
+        let fi     = filter[fi_pos];
+        let is_sel = fi_pos == selected;
+        let cursor = if is_sel { "▸" } else { " " };
 
-        let is_selected = idx == selected;
-        let cursor = if is_selected { "▸" } else { " " };
+        if is_sel { print!("{ESC}[48;2;20;26;46m"); }
 
-        if is_selected {
-            print!("{ESC}[48;2;20;25;40m");
-        }
-
-        let (name, desc, sw) = if idx < NAMED_PALETTES.len() {
-            let (id, display, desc, from_hex, to_hex) = NAMED_PALETTES[idx];
+        let (name_str, desc_str, sw_str, fhex, thex) = if fi < NAMED_PALETTES.len() {
+            let (id, display, desc, fh, th) = NAMED_PALETTES[fi];
             let p = if id == "fire" {
                 soften(&FIRE_PALETTE, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
             } else {
-                let from = hex_to_rgb(from_hex).unwrap_or((0, 0, 0));
-                let to = hex_to_rgb(to_hex).unwrap_or((255, 255, 255));
+                let from = hex_to_rgb(fh).unwrap_or((0, 0, 0));
+                let to   = hex_to_rgb(th).unwrap_or((255, 255, 255));
                 soften(&generate_palette(from, to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
             };
-            (display, desc, palette_swatch(&p, swatch_w))
+            (display, desc, palette_swatch(&p, sw_w), fh, th)
         } else {
-            // "Custom" entry
-            let sw = swatch((60, 0, 60), (255, 200, 100), swatch_w);
-            ("Custom", "enter your own #rrggbb gradient", sw)
+            ("Custom", "enter your own #rrggbb gradient",
+             swatch((50, 0, 60), (255, 180, 80), sw_w), "", "")
         };
 
-        if is_selected {
-            print!("{ESC}[1;38;2;255;220;80m");
+        if is_sel {
+            print!("{ESC}[1;38;2;255;230;100m");
         } else {
-            print!("{ESC}[38;2;200;200;210m");
+            print!("{ESC}[38;2;178;178;205m");
         }
 
-        print!(
-    "  {cursor} {name:<18}    {sw}  {ESC}[38;2;140;140;160m{desc}{ESC}[0m"
+        print!("  {cursor} {name_str:<18}  {sw_str}");
+
+        if fi < NAMED_PALETTES.len() {
+            print!(
+                "  {ESC}[38;2;82;82;108m{fhex}\
+                 {ESC}[38;2;48;48;68m→\
+                 {ESC}[38;2;82;82;108m{thex}{ESC}[0m"
+            );
+        }
+
+        // Description — dim for unselected, softer for selected
+        let used_approx = 4 + 18 + 2 + sw_w + 2 + 17;
+        if cols > used_approx + 6 {
+            let max_d = cols.saturating_sub(used_approx + 4);
+            let td    = truncate_display(desc_str, max_d);
+            let dc    = if is_sel { "140;140;172" } else { "62;62;82" };
+            print!("  {ESC}[38;2;{dc}m{td}{ESC}[0m");
+        }
+
+        print!("{ESC}[0m");
+    }
+
+    // ── Separator ──────────────────────────────────────────────────────
+    let sep_row = (list_end + 1) as u16;
+    print!(
+        "{ESC}[{sep_row};1H{ESC}[2K\
+         {ESC}[38;2;35;35;55m{}{ESC}[0m",
+        "─".repeat(cols)
     );
 
-        if is_selected {
-            // Fill rest of line with selection background
-            print!("{ESC}[48;2;20;25;40m{}{ESC}[0m", " ".repeat(4));
+    // ── Preview swatch for selected entry ──────────────────────────────
+    let prev_row = (rows - 2) as u16;
+    print!("{ESC}[{prev_row};1H{ESC}[2K");
+    if let Some(&fi) = filter.get(selected) {
+        if fi < NAMED_PALETTES.len() {
+            let (id, display, _, fh, th) = NAMED_PALETTES[fi];
+            let p = if id == "fire" {
+                soften(&FIRE_PALETTE, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
+            } else {
+                let from = hex_to_rgb(fh).unwrap_or((0, 0, 0));
+                let to   = hex_to_rgb(th).unwrap_or((255, 255, 255));
+                soften(&generate_palette(from, to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
+            };
+            let pw = cols.saturating_sub(22).min(72);
+            let ps = palette_swatch(&p, pw);
+            print!("  {ESC}[38;2;92;92;115m▸ {ESC}[38;2;172;172;198m{display:<16}{ESC}[0m  {ps}");
+        } else {
+            print!("  {ESC}[38;2;92;92;115m▸ Custom gradient — press Enter to configure{ESC}[0m");
         }
     }
 
-    // Bottom separator
-    let sep_row = (list_start + visible + 1) as u16;
-    print!("{ESC}[{sep_row};1H{ESC}[2K{ESC}[38;2;60;60;80m{}{ESC}[0m", "─".repeat(cols));
+    // ── Key hints ──────────────────────────────────────────────────────
+    let hint_row = rows as u16;
+    print!("{ESC}[{hint_row};1H{ESC}[2K");
+    print!(
+        "{ESC}[48;2;15;15;28m \
+         {ESC}[38;2;255;200;80m↑↓{ESC}[38;2;98;98;128m move  \
+         {ESC}[38;2;255;200;80mPgUp/Dn{ESC}[38;2;98;98;128m page  \
+         {ESC}[38;2;255;200;80m/{ESC}[38;2;98;98;128m search  \
+         {ESC}[38;2;255;200;80mr{ESC}[38;2;98;98;128m random  \
+         {ESC}[38;2;255;200;80mEnter{ESC}[38;2;98;98;128m select  \
+         {ESC}[38;2;255;200;80mEsc{ESC}[38;2;98;98;128m·{ESC}[38;2;255;200;80mq{ESC}[38;2;98;98;128m quit \
+         {ESC}[0m"
+    );
+
     io::stdout().flush().ok();
 }
 
@@ -956,46 +1307,95 @@ fn draw_picker(selected: usize, (cols, rows): (usize, usize)) {
 fn interactive_pick() -> Option<PaletteChoice> {
     let _guard = TermRawGuard::enter().ok()?;
 
-    let total = NAMED_PALETTES.len() + 1; // +1 for custom
-    let mut selected = 0usize;
+    let mut selected     = 0usize;
+    let mut search       = String::new();
+    let mut search_active = false;
+    let mut filter       = apply_filter("");
+    let page_size        = 10usize;
 
     loop {
         let size = terminal_size();
-        draw_picker(selected, size);
+        draw_picker(selected, &filter, &search, search_active, size);
 
-        match read_key() {
-            Key::Up => {
-                if selected > 0 {
-                    selected -= 1;
-                }
-            }
-            Key::Down => {
-                if selected + 1 < total {
-                    selected += 1;
-                }
-            }
-            Key::Enter => {
-                if selected < NAMED_PALETTES.len() {
-                    let (id, _, _, _, _) = NAMED_PALETTES[selected];
-                    return Some(PaletteChoice::Named(id.to_string()));
-                } else {
-                    // Custom hex input — clear area and prompt
-                    let (_, rows) = terminal_size();
-                    let base = rows as u16 - 4;
-                    print!("{ESC}[{base};1H{ESC}[J");
-                    print!("{ESC}[{base};1H{ESC}[38;2;180;180;200m  Enter hex colors (e.g. #ff0000){ESC}[0m\n");
-                    io::stdout().flush().ok();
+        let key = read_key();
 
-                    let from_str = prompt_hex("  From:", base + 2)?;
-                    let to_str = prompt_hex("  To:  ", base + 3)?;
-
-                    let from = hex_to_rgb(&from_str)?;
-                    let to = hex_to_rgb(&to_str)?;
-                    return Some(PaletteChoice::Custom { from, to });
+        if search_active {
+            match key {
+                Key::Esc | Key::Enter => { search_active = false; }
+                Key::Backspace => {
+                    search.pop();
+                    filter   = apply_filter(&search);
+                    selected = 0;
                 }
+                Key::Char(c) => {
+                    search.push(c);
+                    filter   = apply_filter(&search);
+                    selected = 0;
+                }
+                _ => {}
             }
-            Key::Esc | Key::Char('q') => return None,
-            _ => {}
+        } else {
+            match key {
+                Key::Up => {
+                    if selected > 0 { selected -= 1; }
+                }
+                Key::Down => {
+                    if !filter.is_empty() && selected + 1 < filter.len() {
+                        selected += 1;
+                    }
+                }
+                Key::PageUp => {
+                    selected = selected.saturating_sub(page_size);
+                }
+                Key::PageDown => {
+                    if !filter.is_empty() {
+                        selected = (selected + page_size).min(filter.len() - 1);
+                    }
+                }
+                Key::Char('/') => {
+                    search_active = true;
+                }
+                Key::Char('r') | Key::Char('R') => {
+                    if !filter.is_empty() {
+                        let mut rng = Rng::new();
+                        selected = (rng.next_u64() % filter.len() as u64) as usize;
+                    }
+                }
+                Key::Enter => {
+                    if let Some(&fi) = filter.get(selected) {
+                        if fi < NAMED_PALETTES.len() {
+                            let (id, _, _, _, _) = NAMED_PALETTES[fi];
+                            return Some(PaletteChoice::Named(id.to_string()));
+                        } else {
+                            let (_, rows) = terminal_size();
+                            let base = rows as u16 - 4;
+                            print!("{ESC}[{base};1H{ESC}[J");
+                            print!(
+                                "{ESC}[{base};1H\
+                                 {ESC}[38;2;175;175;200m  Enter hex colors (e.g. #ff0000){ESC}[0m\n"
+                            );
+                            io::stdout().flush().ok();
+                            let from_str = prompt_hex("  From:", base + 2)?;
+                            let to_str   = prompt_hex("  To:  ", base + 3)?;
+                            let from = hex_to_rgb(&from_str)?;
+                            let to   = hex_to_rgb(&to_str)?;
+                            return Some(PaletteChoice::Custom { from, to });
+                        }
+                    }
+                }
+                Key::Esc => {
+                    // First Esc clears search; second exits
+                    if !search.is_empty() {
+                        search.clear();
+                        filter   = apply_filter("");
+                        selected = 0;
+                    } else {
+                        return None;
+                    }
+                }
+                Key::Char('q') => return None,
+                _ => {}
+            }
         }
     }
 }
