@@ -1,3 +1,4 @@
+# pyroclear ◆ terminal goes up in flames, then clears.
 
 ```
   ██████╗ ██╗   ██╗██████╗  ██████╗  ██████╗██╗     ███████╗ █████╗ ██████╗ 
@@ -8,139 +9,97 @@
   ╚═╝        ╚═╝   ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝
 ```
 
-A terminal `clear` replacement that burns your screen down before wiping it — a live, physically-simulated fire animation rendered directly in your terminal, in any color you choose.
+A high-fidelity terminal `clear` replacement that burns your screen down before wiping it. Watch a physically-simulated fire climb, decay, and vanish before cleanly clearing your shell.
 
-Written in Rust. Zero runtime dependencies beyond `libc`. Sixty frames a second, no flicker, no subprocess spawning, no external assets.
+Written in modern Rust. Zero runtime dependencies beyond `libc`. Highly optimized, flicker-free, and customizable.
 
 ---
 
-## What it does
+## ⚡ Features
 
-Run it in place of `clear`. The terminal ignites from the bottom row, the fire climbs and dies out on its own, and the screen clears the instant the last ember fades — no lingering black frame, no forced background color, no wasted time.
+- **Live Resize Support**: Queries terminal size on the fly via direct `ioctl` syscalls — no subprocesses. The grid adjusts instantly as you resize.
+- **Transparent Background**: Empty cells inherit your terminal's default theme/opacity instead of drawing solid black rectangles.
+- **300+ Built-in Palettes**: Categorized beautifully in `--list-colors` with aligned swatches.
+- **Interactive TUIs**:
+  - **Color Picker (`--pick`)**: Browse, search, filter, and preview palettes in real-time.
+  - **Settings Manager (`--settings`)**: Adjust FPS, wind/drift, and flame height in raw mode.
+  - **Custom Palette Manager (`--custom`)**: Build, name, delete, and save your own hex gradients.
+- **Persistent Configuration**: Settings and palettes are automatically written to `~/.config/pyroclear/config.toml`.
+- **Signal-safe**: Interrupted runs (Ctrl-C) restore the terminal state and cursor cleanly.
 
-Under the hood it's the classic Doom-fire algorithm: a heat-value grid where every cell inherits its value from the cell below it, decaying and drifting sideways as it rises. It's cheap to simulate, looks convincing, and needs nothing more exotic than a heat-to-color lookup table.
+---
 
-## Features
+## 📦 Installation
 
-- **Live terminal-size awareness.** Reads terminal dimensions via a direct `ioctl(TIOCGWINSZ)` call every frame — no subprocess spawning — and rebuilds the simulation grid on the spot if you resize mid-burn.
-- **Transparent background.** Unlit cells emit no color at all; your terminal's actual background, transparency, or theme shows through instead of a forced black rectangle.
-- **Nine built-in palettes**, plus fully custom gradients.
-- **Interactive color picker.** A raw-mode TUI with live swatches — no need to memorize palette names.
-- **Persistent configuration.** Whatever you choose is written to disk and reused automatically on every future run.
-- **Signal-safe.** Ctrl-C during the animation restores your cursor and terminal state cleanly rather than leaving your shell in a broken state.
-- **No dependencies beyond `libc`.** Compiles in seconds, ships as a single static-ish binary.
-
-## Installation
+Building from source requires Cargo:
 
 ```bash
-git clone <your-repo-url> pyroclear
+# Clone the repository
+git clone https://github.com/shreyanth-sureshkrishnaa/pyroclear.git
 cd pyroclear
+
+# Build and install to ~/.cargo/bin
 cargo build --release
+cargo install --path .
 ```
 
-The binary is now at `target/release/pyroclear`. Put it somewhere on your `PATH`, or reference it directly.
+### Wire it up as `clear`
 
+**Bash / Zsh**
 ```bash
-mkdir -p ~/.local/bin
-cp target/release/pyroclear ~/.local/bin/
+# Append to ~/.bashrc or ~/.zshrc
+alias clear="pyroclear"
 ```
 
-## Wiring it in as `clear`
-
-**bash / zsh**
-
-```bash
-# ~/.bashrc or ~/.zshrc
-alias clear='pyroclear'
-```
-
-**fish**
-
+**Fish**
 ```fish
-funcsave clear <<'EOF'
-function clear
-    pyroclear
-end
-EOF
+# Append to ~/.config/fish/config.fish
+alias -s clear="pyroclear"
 ```
 
-or, more simply:
+---
 
-```fish
-alias --save clear 'pyroclear'
-```
-
-Reload your shell config and `clear` now burns before it clears.
-
-## Usage
+## 🚀 Usage
 
 ```
 pyroclear [OPTIONS]
-
-OPTIONS:
-    --color <name>          Named palette (see --list-colors)
-    --pick, -p              Interactive TUI color picker
-    --from <hex> --to <hex> Custom gradient, e.g. --from "#1a0000" --to "#ffcc00"
-    --list-colors           List palettes with live color swatches
-    -h, --help              Show this help
 ```
 
-### Named palettes
+### Command Modes
 
-| Name     | Description                                    |
-|----------|-------------------------------------------------|
-| `fire`   | Classic ember red through orange to white       |
-| `ice`    | Deep cold through electric cyan to white         |
-| `toxic`  | Void black through acid lime to pale             |
-| `purple` | Dark void through violet to hot lavender         |
-| `plasma` | Deep violet through magenta to white hot         |
-| `sunset` | Midnight blue through crimson to gold            |
-| `ocean`  | Abyssal black through ocean blue to foam         |
-| `lava`   | Basalt black through blood red to neon orange    |
-| `mono`   | Black through dim grey to pure white             |
+| Option | Description | Example |
+| :--- | :--- | :--- |
+| **`--start`** | Open the premium onboarding presentation & guide | `pyroclear --start` |
+| **`--settings`, `-s`** | Adjust FPS, wind direction, and flame height decay | `pyroclear --settings` |
+| **`--pick`, `-p`** | Interactive color palette picker with live swatches | `pyroclear --pick` |
+| **`--custom`** | TUI to save, name, manage and run custom gradients | `pyroclear --custom` |
+| **`--color <name>`** | Burn with a specific named palette (saves as default) | `pyroclear --color toxic` |
+| **`--from <hex> --to <hex>`**| Burn with a one-off custom gradient | `pyroclear --from "#002080" --to "#00f0ff"` |
+| **`--list-colors`** | View all 300+ palettes grouped by color family | `pyroclear --list-colors` |
+| **`--info`, `-i`** | Display active palette card and configured options | `pyroclear --info` |
+| **`--random`, `-r`** | Run with a random palette every time | `pyroclear --random` |
+| **`--no-save`** | Run choice without saving it to configuration | `pyroclear --color ocean --no-save` |
+| **`--reset`** | Reset configuration to default fire palette | `pyroclear --reset` |
+| **`-h, --help`** | Show quick help screen | `pyroclear --help` |
 
-```bash
-pyroclear --color ice
-```
+---
 
-### Custom gradients
+## 🛠️ Configuration
 
-Any two hex colors define a full 37-step ramp, generated at runtime by interpolating in HSV space rather than raw RGB — this avoids the muddy gray midtones a naive linear blend produces, and keeps colors vivid at every heat level.
+Your preferences are saved in:
+`~/.config/pyroclear/config.toml`
 
-```bash
-pyroclear --from "#1a0000" --to "#ffcc00"
-```
+Custom palettes created in the TUI are stored in:
+`~/.config/pyroclear/custom_palettes.toml`
 
-### Interactive picker
+---
 
-```bash
-pyroclear --pick
-```
+## 📝 Performance
 
-Opens a raw-mode terminal UI listing every palette with a live color swatch. Arrow keys to navigate, Enter to select, Esc or `q` to cancel. Selecting "Custom" prompts for a pair of hex values inline.
+The physics engine runs at standard ~60 FPS (customizable) with multiple propagation steps per frame. The entire rendering buffer is flushed to stdout in a single write operation, ensuring sub-millisecond execution times even on massive high-refresh-rate displays.
 
-## Persistence
+---
 
-Whichever palette or gradient you select — via `--color`, `--from`/`--to`, or the interactive picker — is written to:
+## 📄 License
 
-```
-~/.config/pyroclear/config.toml
-```
-
-Every subsequent run with no color flags reads this file and reuses your last choice automatically. Pass a new flag at any time to change and re-save it.
-
-## How it works
-
-The simulation is a Doom-fire heat grid: the bottom row holds maximum heat and acts as the fire's source. Each frame, every cell above the source pulls its new value from the cell directly below it, minus a small random decay, with a touch of horizontal drift so the flame doesn't rise in perfectly straight columns. After a short ignition phase the source itself begins cooling, so the fire dies out naturally rather than being cut off by a fixed timer.
-
-Heat values map to color through a 37-step palette. The whole frame is redrawn each tick using an ANSI cursor-home escape sequence rather than clearing and rebuilding the screen, which avoids flicker without needing a curses-style dependency.
-
-Color generation and terminal I/O are entirely dependency-free aside from `libc`, which is used for direct `ioctl` terminal-size queries, raw-mode terminal control for the picker, and signal handling.
-
-## Performance
-
-The simulation runs at roughly sixty frames per second with two propagation steps per frame, and comfortably handles terminal widths well beyond 200 columns without dropping frames, since the entire pipeline — grid update, color lookup, and frame buffering — runs as native compiled code with no interpreter or garbage collector in the loop.
-
-## License
-
-Add your preferred license here.
+This project is licensed under the MIT License.
