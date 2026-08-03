@@ -1,0 +1,194 @@
+// engine.rs — PRNG, terminal I/O, fire simulation loop.
+
+use std::io::{self, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use crate::{ESC, palettes::Palette, config::AnimSettings};
+
+// ── Simulation constants ──────────────────────────────────────────────
+
+const MAX_HEAT: u8         = 36;
+const STEPS_PER_FRAME: u32 = 2;
+const MAX_DURATION: Duration = Duration::from_millis(2200);
+const SOURCE_COOL_START: f32 = 0.38;
+const DIE_OUT_THRESHOLD: u8  = 2;
+
+// ── PRNG (xorshift64*) ────────────────────────────────────────────────
+
+pub struct Rng(u64);
+
+impl Rng {
+    pub fn new() -> Self {
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos() as u64 | 1;
+        Rng(seed)
+    }
+
+    pub fn next_u64(&mut self) -> u64 {
+        let mut x = self.0;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.0 = x;
+        x
+    }
+
+    pub fn range(&mut self, lo: i32, hi: i32) -> i32 {
+        let span = (hi - lo + 1) as u64;
+        lo + (self.next_u64() % span) as i32
+    }
+}
+
+// ── Terminal size ─────────────────────────────────────────────────────
+
+pub fn terminal_size() -> (usize, usize) {
+    unsafe {
+        let mut ws: libc::winsize = std::mem::zeroed();
+        if libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut ws) == 0
+            && ws.ws_col > 0
+            && ws.ws_row > 0
+        {
+            return (ws.ws_col as usize, ws.ws_row as usize);
+        }
+    }
+    (80, 24)
+}
+
+// ── Renderer ──────────────────────────────────────────────────────────
+
+#[derive(PartialEq, Clone, Copy)]
+enum CellColor {
+    Default,
+    Rgb(u8, u8, u8),
+}
+
+fn render(buf: &mut String, grid: &[u8], cols: usize, rows: usize, palette: &Palette) {
+    buf.clear();
+    buf.push_str(ESC);
+    buf.push_str("[H");
+
+    let mut last: Option<CellColor> = None;
+    for y in 0..rows {
+        for x in 0..cols {
+            let heat  = grid[y * cols + x];
+            let color = if heat == 0 {
+                CellColor::Default
+            } else {
+                let (r, g, b) = palette[heat as usize];
+                CellColor::Rgb(r, g, b)
+            };
+
+            if last != Some(color) {
+                match color {
+                    CellColor::Default      => buf.push_str(&format!("{ESC}[49m")),
+                    CellColor::Rgb(r, g, b) => buf.push_str(&format!("{ESC}[48;2;{r};{g};{b}m")),
+                }
+                last = Some(color);
+            }
+            buf.push(' ');
+        }
+        buf.push('\n');
+    }
+}
+
+fn resize_grid(cols: usize, rows: usize) -> Vec<u8> {
+    let mut grid = vec![0u8; cols * rows];
+    for x in 0..cols {
+        grid[(rows - 1) * cols + x] = MAX_HEAT;
+    }
+    grid
+}
+
+// ── Burn loop ─────────────────────────────────────────────────────────
+
+pub fn burn(palette: &Palette, settings: &AnimSettings, interrupted: Arc<AtomicBool>) {
+    let (mut cols, mut rows) = terminal_size();
+    let mut grid = resize_grid(cols, rows);
+    let mut rng  = Rng::new();
+
+    let stdout = io::stdout();
+    let mut out = stdout.lock();
+    let _ = write!(out, "{ESC}[?25l{ESC}[2J"); // hide cursor, clear screen
+
+    let start          = Instant::now();
+    let source_cool_at = MAX_DURATION.mul_f32(SOURCE_COOL_START);
+    let mut frame      = String::with_capacity(cols * rows * 8);
+    let frame_delay    = Duration::from_millis(1000 / settings.fps as u64);
+
+    loop {
+        if interrupted.load(Ordering::Relaxed) { break; }
+
+        let elapsed = start.elapsed();
+        if elapsed > MAX_DURATION { break; }
+
+        // Live resize
+        let (new_cols, new_rows) = terminal_size();
+        if new_cols != cols || new_rows != rows {
+            cols = new_cols;
+            rows = new_rows;
+            grid = resize_grid(cols, rows);
+            frame.reserve(cols * rows * 8);
+        }
+
+        // Refresh source row while below cool-down threshold
+        if elapsed <= source_cool_at {
+            for x in 0..cols {
+                grid[(rows - 1) * cols + x] = MAX_HEAT;
+            }
+        }
+
+        // Propagation steps
+        for _ in 0..STEPS_PER_FRAME {
+            for x in 0..cols {
+                for y in 1..rows {
+                    let below = grid[y * cols + x];
+
+                    let decay = match settings.height {
+                        0 => rng.range(1, 4), // Low
+                        1 => rng.range(0, 3), // Medium
+                        2 => rng.range(0, 2), // High
+                        3 => rng.range(0, 1), // Extreme
+                        _ => rng.range(0, 3),
+                    };
+
+                    let drift = match settings.wind {
+                        -2 => rng.range(-2, 0), // Strong Left
+                        -1 => rng.range(-1, 0), // Gentle Left
+                         0 => rng.range(-1, 1), // None
+                         1 => rng.range(0,  1), // Gentle Right
+                         2 => rng.range(0,  2), // Strong Right
+                         _ => rng.range(-1, 1),
+                    };
+
+                    let nx      = (x as i32 + drift).clamp(0, cols as i32 - 1) as usize;
+                    let new_val = (below as i32 - decay).max(0) as u8;
+                    grid[(y - 1) * cols + nx] = new_val;
+                }
+            }
+
+            if elapsed > source_cool_at {
+                for x in 0..cols {
+                    let idx = (rows - 1) * cols + x;
+                    let dec = rng.range(2, 6);
+                    grid[idx] = (grid[idx] as i32 - dec).max(0) as u8;
+                }
+            }
+        }
+
+        render(&mut frame, &grid, cols, rows, palette);
+        let _ = out.write_all(frame.as_bytes());
+        let _ = out.flush();
+
+        if elapsed > source_cool_at {
+            let peak = grid.iter().copied().max().unwrap_or(0);
+            if peak < DIE_OUT_THRESHOLD { break; }
+        }
+
+        std::thread::sleep(frame_delay);
+    }
+
+    let _ = write!(out, "{ESC}[?25h"); // always restore cursor
+}
