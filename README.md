@@ -1,13 +1,4 @@
-# pyroclear ◆ terminal goes up in flames, then clears.
-
-```
-  ██████╗ ██╗   ██╗██████╗  ██████╗  ██████╗██╗     ███████╗ █████╗ ██████╗ 
-  ██╔══██╗╚██╗ ██╔╝██╔══██╗██╔═══██╗██╔════╝██║     ██╔════╝██╔══██╗██╔══██╗
-  ██████╔╝ ╚████╔╝ ██████╔╝██║   ██║██║     ██║     █████╗  ███████║██████╔╝
-  ██╔═══╝   ╚██╔╝  ██╔══██╗██║   ██║██║     ██║     ██╔══╝  ██╔══██║██╔══██╗
-  ██║        ██║   ██║  ██║╚██████╔╝╚██████╗███████╗███████╗██║  ██║██║  ██║
-  ╚═╝        ╚═╝   ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝
-```
+# pyroclear
 
 A high-fidelity terminal `clear` replacement that burns your screen down before wiping it. Watch a physically-simulated fire climb, decay, and vanish before cleanly clearing your shell.
 
@@ -15,7 +6,7 @@ Written in modern Rust. Zero runtime dependencies beyond `libc`. Highly optimize
 
 ---
 
-## ⚡ Features
+## Features
 
 - **Live Resize Support**: Queries terminal size on the fly via direct `ioctl` syscalls — no subprocesses. The grid adjusts instantly as you resize.
 - **Transparent Background**: Empty cells inherit your terminal's default theme/opacity instead of drawing solid black rectangles.
@@ -29,7 +20,7 @@ Written in modern Rust. Zero runtime dependencies beyond `libc`. Highly optimize
 
 ---
 
-## 📦 Installation
+## Installation
 
 Building from source requires Cargo:
 
@@ -59,7 +50,7 @@ alias -s clear="pyroclear"
 
 ---
 
-## 🚀 Usage
+## Usage
 
 ```
 pyroclear [OPTIONS]
@@ -84,7 +75,7 @@ pyroclear [OPTIONS]
 
 ---
 
-## 🛠️ Configuration
+## Configuration
 
 Your preferences are saved in:
 `~/.config/pyroclear/config.toml`
@@ -94,12 +85,12 @@ Custom palettes created in the TUI are stored in:
 
 ---
 
-## 📝 Performance
+## Performance
 
 The physics engine runs at standard ~60 FPS (customizable) with multiple propagation steps per frame. The entire rendering buffer is flushed to stdout in a single write operation, ensuring sub-millisecond execution times even on massive high-refresh-rate displays.
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the MIT License.
