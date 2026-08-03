@@ -30,7 +30,6 @@ const ESC: &str = "\x1b";
 const MAX_HEAT: u8 = 36;
 
 // Sim/render tuning
-const FRAME_DELAY: Duration = Duration::from_millis(16); // ~60fps
 const STEPS_PER_FRAME: u32 = 2; // extra propagation steps per frame
 const MAX_DURATION: Duration = Duration::from_millis(2200);
 const SOURCE_COOL_START: f32 = 0.38;
@@ -465,7 +464,8 @@ fn print_version() {
 }
 
 fn print_info() {
-    let choice = load_config().unwrap_or(PaletteChoice::Named("fire".to_string()));
+    let (choice, _) = load_config();
+    let choice = choice.unwrap_or(PaletteChoice::Named("fire".to_string()));
     print_banner();
     println!("  {ESC}[1;38;2;255;200;80mActive Palette{ESC}[0m\n");
     match &choice {
@@ -526,6 +526,7 @@ fn print_help() {
         ("--color <name>",            "Named palette  (saved for future runs)"),
         ("--from <hex> --to <hex>",   "Custom gradient (saved for future runs)"),
         ("--pick,   -p",              "Interactive TUI color picker"),
+        ("--settings, -s",            "Interactive TUI settings page"),
         ("--random, -r",              "Random palette — different every run"),
         ("--reset",                   "Reset to default (fire), then burn"),
     ];
@@ -560,6 +561,7 @@ fn print_help() {
     let ex: &[(&str, &str)] = &[
         ("pyroclear",                                   "burn with saved / default palette"),
         ("pyroclear --color ocean",                     "burn ocean & save it"),
+        ("pyroclear --settings",                        "configure speed, wind, sparks, etc."),
         ("pyroclear --random",                          "random palette each run"),
         ("pyroclear --from \"#002080\" --to \"#00f0ff\"",   "custom gradient"),
         ("pyroclear --pick",                            "interactive picker"),
@@ -609,14 +611,21 @@ fn palette_swatch(palette: &Palette, width: usize) -> String {
 }
 
 /// Build and return a palette swatch for any named or custom entry.
-fn render_swatch(id: &str, from_hex: &str, to_hex: &str, width: usize) -> String {
+fn render_swatch(id: &str, from_hex: &str, to_hex: &str, width: usize, settings: &AnimSettings) -> String {
+    let (desat, bright) = match settings.soften {
+        0 => (0.90, 0.10), // Vivid
+        1 => (0.62, 0.32), // Balanced (default)
+        2 => (0.40, 0.50), // Pastel
+        3 => (0.50, 0.15), // Dim
+        _ => (0.62, 0.32),
+    };
     if id == "fire" {
-        palette_swatch(&soften(&FIRE_PALETTE, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN), width)
+        palette_swatch(&soften(&FIRE_PALETTE, desat, bright), width)
     } else {
         let from = hex_to_rgb(from_hex).unwrap_or((0, 0, 0));
         let to   = hex_to_rgb(to_hex).unwrap_or((255, 255, 255));
         palette_swatch(
-            &soften(&generate_palette(from, to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN),
+            &soften(&generate_palette(from, to), desat, bright),
             width,
         )
     }
@@ -624,6 +633,7 @@ fn render_swatch(id: &str, from_hex: &str, to_hex: &str, width: usize) -> String
 
 fn print_color_list() {
     print_banner();
+    let (_, settings) = load_config();
     let (cols, _) = terminal_size();
     let n = NAMED_PALETTES.len();
     let two_col = cols >= 132;
@@ -648,7 +658,7 @@ fn print_color_list() {
             let half = (count + 1) / 2;
             for row in 0..half {
                 let (id_l, _, _, from_l, to_l) = palettes[row];
-                let sw_l = render_swatch(id_l, from_l, to_l, sw_w);
+                let sw_l = render_swatch(id_l, from_l, to_l, sw_w, &settings);
                 print!(
                     "  {ESC}[1;38;2;255;225;100m{id_l:<id_w$}{ESC}[0m {sw_l} \
                      {ESC}[38;2;90;90;112m{from_l}{ESC}[38;2;50;50;70m→{ESC}[38;2;90;90;112m{to_l}{ESC}[0m"
@@ -656,7 +666,7 @@ fn print_color_list() {
                 let right = row + half;
                 if right < count {
                     let (id_r, _, _, from_r, to_r) = palettes[right];
-                    let sw_r = render_swatch(id_r, from_r, to_r, sw_w);
+                    let sw_r = render_swatch(id_r, from_r, to_r, sw_w, &settings);
                     print!(
                         "    {ESC}[1;38;2;255;225;100m{id_r:<id_w$}{ESC}[0m {sw_r} \
                          {ESC}[38;2;90;90;112m{from_r}{ESC}[38;2;50;50;70m→{ESC}[38;2;90;90;112m{to_r}{ESC}[0m"
@@ -666,7 +676,7 @@ fn print_color_list() {
             }
         } else {
             for (id, _, desc, from_hex, to_hex) in palettes {
-                let sw = render_swatch(id, from_hex, to_hex, sw_w);
+                let sw = render_swatch(id, from_hex, to_hex, sw_w, &settings);
                 println!(
                     "  {ESC}[1;38;2;255;225;100m{id:<id_w$}{ESC}[0m {sw}  \
                      {ESC}[38;2;125;125;148m{desc}{ESC}[0m"
@@ -796,6 +806,30 @@ fn soften(palette: &Palette, desaturate_factor: f32, brighten_factor: f32) -> Pa
 // Palette selection: CLI args -> saved config -> default
 // ---------------------------------------------------------------------
 
+#[derive(Clone)]
+struct AnimSettings {
+    fps: u32,
+    wind: i32,     // -2 (Strong Left), -1 (Gentle Left), 0 (None), 1 (Gentle Right), 2 (Strong Right), 3 (Swaying Breeze)
+    height: i32,   // 0 (Low), 1 (Medium), 2 (High), 3 (Extreme)
+    sparks: bool,
+    pulsate: bool,
+    soften: i32,   // 0 (Vivid), 1 (Balanced), 2 (Pastel), 3 (Dim)
+}
+
+impl Default for AnimSettings {
+    fn default() -> Self {
+        Self {
+            fps: 60,
+            wind: 0,
+            height: 1, // Medium
+            sparks: true,
+            pulsate: false,
+            soften: 1, // Balanced
+        }
+    }
+}
+
+#[derive(Clone)]
 enum PaletteChoice {
     Named(String),
     Custom { from: (u8, u8, u8), to: (u8, u8, u8) },
@@ -806,13 +840,17 @@ fn config_path() -> Option<PathBuf> {
     Some(PathBuf::from(home).join(".config/pyroclear/config.toml"))
 }
 
-fn load_config() -> Option<PaletteChoice> {
-    let path = config_path()?;
-    let content = std::fs::read_to_string(path).ok()?;
+fn load_config() -> (Option<PaletteChoice>, AnimSettings) {
+    let mut choice = None;
+    let mut settings = AnimSettings::default();
+
+    let Some(path) = config_path() else { return (None, settings); };
+    let Ok(content) = std::fs::read_to_string(path) else { return (None, settings); };
 
     let mut palette = None;
     let mut from = None;
     let mut to = None;
+
     for raw in content.lines() {
         let line = raw.trim();
         if line.is_empty() || line.starts_with('[') || line.starts_with('#') {
@@ -824,6 +862,12 @@ fn load_config() -> Option<PaletteChoice> {
                 "palette" => palette = Some(val),
                 "from" => from = Some(val),
                 "to" => to = Some(val),
+                "fps" => if let Ok(n) = val.parse::<u32>() { settings.fps = n; },
+                "wind" => if let Ok(n) = val.parse::<i32>() { settings.wind = n; },
+                "height" => if let Ok(n) = val.parse::<i32>() { settings.height = n; },
+                "sparks" => if let Ok(b) = val.parse::<bool>() { settings.sparks = b; },
+                "pulsate" => if let Ok(b) = val.parse::<bool>() { settings.pulsate = b; },
+                "soften" => if let Ok(n) = val.parse::<i32>() { settings.soften = n; },
                 _ => {}
             }
         }
@@ -831,24 +875,42 @@ fn load_config() -> Option<PaletteChoice> {
 
     if let (Some(f), Some(t)) = (from, to) {
         if let (Some(fc), Some(tc)) = (hex_to_rgb(&f), hex_to_rgb(&t)) {
-            return Some(PaletteChoice::Custom { from: fc, to: tc });
+            choice = Some(PaletteChoice::Custom { from: fc, to: tc });
         }
+    } else if let Some(p) = palette {
+        choice = Some(PaletteChoice::Named(p));
     }
-    palette.map(PaletteChoice::Named)
+
+    (choice, settings)
 }
 
-fn save_config(choice: &PaletteChoice) {
+fn save_config(choice: &PaletteChoice, settings: &AnimSettings) {
     let Some(path) = config_path() else { return };
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let content = match choice {
-        PaletteChoice::Named(name) => format!("[color]\npalette = \"{name}\"\n"),
-        PaletteChoice::Custom { from, to } => format!(
-            "[color]\nfrom = \"#{:02x}{:02x}{:02x}\"\nto = \"#{:02x}{:02x}{:02x}\"\n",
-            from.0, from.1, from.2, to.0, to.1, to.2
-        ),
-    };
+    let mut content = String::new();
+    match choice {
+        PaletteChoice::Named(name) => {
+            content.push_str("[color]\npalette = \"");
+            content.push_str(name);
+            content.push_str("\"\n");
+        }
+        PaletteChoice::Custom { from, to } => {
+            content.push_str(&format!(
+                "[color]\nfrom = \"#{:02x}{:02x}{:02x}\"\nto = \"#{:02x}{:02x}{:02x}\"\n",
+                from.0, from.1, from.2, to.0, to.1, to.2
+            ));
+        }
+    }
+    content.push_str("\n[animation]\n");
+    content.push_str(&format!("fps = {}\n", settings.fps));
+    content.push_str(&format!("wind = {}\n", settings.wind));
+    content.push_str(&format!("height = {}\n", settings.height));
+    content.push_str(&format!("sparks = {}\n", settings.sparks));
+    content.push_str(&format!("pulsate = {}\n", settings.pulsate));
+    content.push_str(&format!("soften = {}\n", settings.soften));
+
     let _ = std::fs::write(path, content);
 }
 
@@ -860,12 +922,10 @@ fn validate_named(name: &str) -> Result<(), String> {
     }
 }
 
-/// Returns true if `--no-save` was passed on the command line.
 fn has_no_save() -> bool {
     std::env::args().any(|a| a == "--no-save")
 }
 
-/// Pick a random named palette.
 fn random_palette_choice() -> PaletteChoice {
     let mut rng = Rng::new();
     let idx = (rng.next_u64() % NAMED_PALETTES.len() as u64) as usize;
@@ -873,13 +933,13 @@ fn random_palette_choice() -> PaletteChoice {
     PaletteChoice::Named(id.to_string())
 }
 
-/// Parses CLI flags. Returns Some(choice) when the user picked a palette.
-/// Does NOT call save_config — that is resolve_choice's responsibility.
-fn parse_args() -> Option<PaletteChoice> {
+/// Parses CLI flags. Returns (choice, run_settings)
+fn parse_args() -> (Option<PaletteChoice>, bool) {
     let args: Vec<String> = std::env::args().collect();
     let mut color = None;
     let mut from  = None;
     let mut to    = None;
+    let mut run_settings = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -902,9 +962,12 @@ fn parse_args() -> Option<PaletteChoice> {
             }
             "--pick" | "-p" => {
                 match interactive_pick() {
-                    Some(c) => return Some(c),
+                    Some(c) => return (Some(c), false),
                     None    => std::process::exit(0),
                 }
+            }
+            "--settings" | "-s" => {
+                run_settings = true;
             }
             "--random" | "-r" => {
                 let c = random_palette_choice();
@@ -919,16 +982,17 @@ fn parse_args() -> Option<PaletteChoice> {
                         );
                     }
                 }
-                return Some(c);
+                return (Some(c), false);
             }
             "--reset" => {
                 let c = PaletteChoice::Named("fire".to_string());
-                save_config(&c); // reset always writes, even with --no-save
+                let (_, default_settings) = load_config();
+                save_config(&c, &default_settings); // reset always writes, even with --no-save
                 eprintln!(
                     "  {ESC}[38;2;255;200;80m◆ Reset:{ESC}[0m \
                      {ESC}[38;2;195;195;215mpalette reset to default (fire){ESC}[0m"
                 );
-                return Some(c);
+                return (Some(c), false);
             }
             "--info" | "-i" => {
                 print_info();
@@ -963,7 +1027,7 @@ fn parse_args() -> Option<PaletteChoice> {
             );
             std::process::exit(1);
         };
-        return Some(PaletteChoice::Custom { from: fc, to: tc });
+        return (Some(PaletteChoice::Custom { from: fc, to: tc }), false);
     }
 
     if let Some(name) = color {
@@ -974,23 +1038,39 @@ fn parse_args() -> Option<PaletteChoice> {
             );
             std::process::exit(1);
         }
-        return Some(PaletteChoice::Named(name));
+        return (Some(PaletteChoice::Named(name)), false);
     }
 
-    None
+    (None, run_settings)
 }
 
-fn resolve_choice() -> PaletteChoice {
-    if let Some(choice) = parse_args() {
-        if !has_no_save() {
-            save_config(&choice);
+fn resolve_choice() -> (PaletteChoice, AnimSettings) {
+    let (saved_choice, mut settings) = load_config();
+    let (parsed_choice, run_settings) = parse_args();
+
+    if run_settings {
+        if let Some(new_settings) = interactive_settings(&settings) {
+            settings = new_settings;
+            if !has_no_save() {
+                let active_choice = parsed_choice.clone().or_else(|| saved_choice.clone()).unwrap_or(PaletteChoice::Named("fire".to_string()));
+                save_config(&active_choice, &settings);
+            }
+        } else {
+            std::process::exit(0);
         }
-        return choice;
     }
-    load_config().unwrap_or(PaletteChoice::Named("fire".to_string()))
+
+    if let Some(choice) = parsed_choice {
+        if !has_no_save() {
+            save_config(&choice, &settings);
+        }
+        return (choice, settings);
+    }
+
+    (saved_choice.unwrap_or(PaletteChoice::Named("fire".to_string())), settings)
 }
 
-fn build_palette(choice: &PaletteChoice) -> Palette {
+fn build_palette(choice: &PaletteChoice, settings: &AnimSettings) -> Palette {
     let raw = match choice {
         PaletteChoice::Named(name) => match name.as_str() {
             "fire" => FIRE_PALETTE,
@@ -999,11 +1079,9 @@ fn build_palette(choice: &PaletteChoice) -> Palette {
                     NAMED_PALETTES.iter().find(|(id, _, _, _, _)| *id == other)
                 {
                     let from = hex_to_rgb(from_hex).unwrap_or((0, 0, 0));
-                    let to = hex_to_rgb(to_hex).unwrap_or((255, 255, 255));
+                    let to   = hex_to_rgb(to_hex).unwrap_or((255, 255, 255));
                     generate_palette(from, to)
                 } else {
-                    // Should have been caught by validate_named, but be safe
-                    eprintln!("{ESC}[1;31merror:{ESC}[0m Unknown palette '{other}', using fire.");
                     FIRE_PALETTE
                 }
             }
@@ -1011,7 +1089,15 @@ fn build_palette(choice: &PaletteChoice) -> Palette {
         PaletteChoice::Custom { from, to } => generate_palette(*from, *to),
     };
 
-    soften(&raw, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
+    let (desat, bright) = match settings.soften {
+        0 => (0.90, 0.10), // Vivid
+        1 => (0.62, 0.32), // Balanced (default)
+        2 => (0.40, 0.50), // Pastel
+        3 => (0.50, 0.15), // Dim
+        _ => (0.62, 0.32),
+    };
+
+    soften(&raw, desat, bright)
 }
 
 // ---------------------------------------------------------------------
@@ -1163,6 +1249,7 @@ fn draw_picker(
     search: &str,
     search_active: bool,
     (cols, rows): (usize, usize),
+    settings: &AnimSettings,
 ) {
     let sw_w = (cols.saturating_sub(50)).clamp(10, 30);
 
@@ -1201,6 +1288,14 @@ fn draw_picker(
     let visible    = list_end.saturating_sub(list_start);
     let offset     = if selected >= visible { selected - visible + 1 } else { 0 };
 
+    let (desat, bright) = match settings.soften {
+        0 => (0.90, 0.10), // Vivid
+        1 => (0.62, 0.32), // Balanced (default)
+        2 => (0.40, 0.50), // Pastel
+        3 => (0.50, 0.15), // Dim
+        _ => (0.62, 0.32),
+    };
+
     for slot in 0..visible {
         let fi_pos = slot + offset;
         let row = (list_start + slot + 1) as u16;
@@ -1216,11 +1311,11 @@ fn draw_picker(
         let (name_str, desc_str, sw_str, fhex, thex) = if fi < NAMED_PALETTES.len() {
             let (id, display, desc, fh, th) = NAMED_PALETTES[fi];
             let p = if id == "fire" {
-                soften(&FIRE_PALETTE, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
+                soften(&FIRE_PALETTE, desat, bright)
             } else {
                 let from = hex_to_rgb(fh).unwrap_or((0, 0, 0));
                 let to   = hex_to_rgb(th).unwrap_or((255, 255, 255));
-                soften(&generate_palette(from, to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
+                soften(&generate_palette(from, to), desat, bright)
             };
             (display, desc, palette_swatch(&p, sw_w), fh, th)
         } else {
@@ -1271,11 +1366,11 @@ fn draw_picker(
         if fi < NAMED_PALETTES.len() {
             let (id, display, _, fh, th) = NAMED_PALETTES[fi];
             let p = if id == "fire" {
-                soften(&FIRE_PALETTE, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
+                soften(&FIRE_PALETTE, desat, bright)
             } else {
                 let from = hex_to_rgb(fh).unwrap_or((0, 0, 0));
                 let to   = hex_to_rgb(th).unwrap_or((255, 255, 255));
-                soften(&generate_palette(from, to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
+                soften(&generate_palette(from, to), desat, bright)
             };
             let pw = cols.saturating_sub(22).min(72);
             let ps = palette_swatch(&p, pw);
@@ -1306,6 +1401,7 @@ fn draw_picker(
 /// or None if the user cancelled.
 fn interactive_pick() -> Option<PaletteChoice> {
     let _guard = TermRawGuard::enter().ok()?;
+    let (_, settings) = load_config();
 
     let mut selected     = 0usize;
     let mut search       = String::new();
@@ -1315,7 +1411,7 @@ fn interactive_pick() -> Option<PaletteChoice> {
 
     loop {
         let size = terminal_size();
-        draw_picker(selected, &filter, &search, search_active, size);
+        draw_picker(selected, &filter, &search, search_active, size, &settings);
 
         let key = read_key();
 
@@ -1396,6 +1492,220 @@ fn interactive_pick() -> Option<PaletteChoice> {
                 Key::Char('q') => return None,
                 _ => {}
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
+// Interactive TUI settings page
+// ---------------------------------------------------------------------
+
+fn draw_settings(selected: usize, settings: &AnimSettings, (cols, rows): (usize, usize)) {
+    print!("{ESC}[1;1H");
+    let title = " pyroclear  ◆  animation settings ";
+    let gap = cols.saturating_sub(title.len());
+    print!(
+        "{ESC}[48;2;20;20;36m{ESC}[38;2;255;200;80m{title}\
+         {ESC}[38;2;50;50;72m{}{ESC}[0m",
+        " ".repeat(gap)
+    );
+
+    let items = [
+        ("FPS / Speed    ", match settings.fps {
+            15 => "15 fps  (extremely slow / cinematic)",
+            30 => "30 fps  (standard retro feel)",
+            45 => "45 fps  (smooth legacy animation)",
+            60 => "60 fps  (default smooth 60fps)",
+            75 => "75 fps  (high refresh rate)",
+            90 => "90 fps  (ultra high refresh rate)",
+            120 => "120 fps (blazing fast execution)",
+            _ => "custom fps",
+        }),
+        ("Wind / Breeze  ", match settings.wind {
+            -2 => "Strong Left   (blowing hard left)",
+            -1 => "Gentle Left   (gently drifting left)",
+            0 => "None          (rising straight up)",
+            1 => "Gentle Right  (gently drifting right)",
+            2 => "Strong Right  (blowing hard right)",
+            3 => "Swaying       (breeze sways left & right)",
+            _ => "unknown wind",
+        }),
+        ("Flame Height   ", match settings.height {
+            0 => "Low           (fast decay, small fire)",
+            1 => "Medium        (default height decay)",
+            2 => "High          (slow decay, tall flames)",
+            3 => "Extreme       (minimum decay, full screen)",
+            _ => "unknown height",
+        }),
+        ("Sparks / Embers", match settings.sparks {
+            false => "Disabled      (clean solid flames)",
+            true  => "Enabled       (flying hot floating sparks)",
+        }),
+        ("Pulsate Source ", match settings.pulsate {
+            false => "Disabled      (steady flame base)",
+            true  => "Enabled       (rhythmic pulsing waves of heat)",
+        }),
+        ("Soften / Glow  ", match settings.soften {
+            0 => "Vivid         (deep raw saturated colors)",
+            1 => "Balanced      (default soft ambient glow)",
+            2 => "Pastel        (low-saturation pastel glow)",
+            3 => "Dim           (darker low-brightness embers)",
+            _ => "unknown soften",
+        }),
+    ];
+
+    let start_row = 3u16;
+
+    for (idx, (label, value)) in items.iter().enumerate() {
+        let row = start_row + idx as u16 * 2;
+        print!("{ESC}[{row};1H{ESC}[2K");
+
+        let is_sel = idx == selected;
+        let cursor = if is_sel { "▸" } else { " " };
+
+        if is_sel {
+            print!("{ESC}[48;2;20;26;46m");
+            print!("  {cursor} {ESC}[1;38;2;255;230;100m{label}{ESC}[0m");
+            print!("{ESC}[48;2;20;26;46m   ◀  {ESC}[1;38;2;255;255;255m{value:<44}{ESC}[0m◀   ");
+            let taken = 4 + 1 + label.len() + 6 + 44 + 4;
+            if cols > taken {
+                print!("{}", " ".repeat(cols - taken));
+            }
+            print!("{ESC}[0m");
+        } else {
+            print!("    {label}      {ESC}[38;2;178;178;205m{value}{ESC}[0m");
+        }
+    }
+
+    let sep_row = start_row + items.len() as u16 * 2 + 1;
+    print!(
+        "{ESC}[{sep_row};1H{ESC}[2K\
+         {ESC}[38;2;35;35;55m{}{ESC}[0m",
+        "─".repeat(cols)
+    );
+
+    let hint_row = rows as u16;
+    print!("{ESC}[{hint_row};1H{ESC}[2K");
+    print!(
+        "{ESC}[48;2;15;15;28m \
+         {ESC}[38;2;255;200;80m↑↓{ESC}[38;2;98;98;128m navigate  \
+         {ESC}[38;2;255;200;80m←→{ESC}[38;2;98;98;128m adjust  \
+         {ESC}[38;2;255;200;80mEnter/s{ESC}[38;2;98;98;128m save & run  \
+         {ESC}[38;2;255;200;80mEsc/q{ESC}[38;2;98;98;128m cancel \
+         {ESC}[0m"
+    );
+
+    io::stdout().flush().ok();
+}
+
+fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
+    let _guard = TermRawGuard::enter().ok()?;
+
+    let mut settings = current.clone();
+    let mut selected = 0usize;
+
+    let fps_options = [15, 30, 45, 60, 75, 90, 120];
+
+    loop {
+        let size = terminal_size();
+        draw_settings(selected, &settings, size);
+
+        match read_key() {
+            Key::Up => {
+                if selected > 0 { selected -= 1; }
+            }
+            Key::Down => {
+                if selected < 5 { selected += 1; }
+            }
+            Key::Left => {
+                match selected {
+                    0 => {
+                        if let Some(idx) = fps_options.iter().position(|&x| x == settings.fps) {
+                            if idx > 0 {
+                                settings.fps = fps_options[idx - 1];
+                            } else {
+                                settings.fps = fps_options[fps_options.len() - 1];
+                            }
+                        }
+                    }
+                    1 => {
+                        if settings.wind > -2 {
+                            settings.wind -= 1;
+                        } else {
+                            settings.wind = 3;
+                        }
+                    }
+                    2 => {
+                        if settings.height > 0 {
+                            settings.height -= 1;
+                        } else {
+                            settings.height = 3;
+                        }
+                    }
+                    3 => {
+                        settings.sparks = !settings.sparks;
+                    }
+                    4 => {
+                        settings.pulsate = !settings.pulsate;
+                    }
+                    5 => {
+                        if settings.soften > 0 {
+                            settings.soften -= 1;
+                        } else {
+                            settings.soften = 3;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Key::Right => {
+                match selected {
+                    0 => {
+                        if let Some(idx) = fps_options.iter().position(|&x| x == settings.fps) {
+                            if idx + 1 < fps_options.len() {
+                                settings.fps = fps_options[idx + 1];
+                            } else {
+                                settings.fps = fps_options[0];
+                            }
+                        }
+                    }
+                    1 => {
+                        if settings.wind < 3 {
+                            settings.wind += 1;
+                        } else {
+                            settings.wind = -2;
+                        }
+                    }
+                    2 => {
+                        if settings.height < 3 {
+                            settings.height += 1;
+                        } else {
+                            settings.height = 0;
+                        }
+                    }
+                    3 => {
+                        settings.sparks = !settings.sparks;
+                    }
+                    4 => {
+                        settings.pulsate = !settings.pulsate;
+                    }
+                    5 => {
+                        if settings.soften < 3 {
+                            settings.soften += 1;
+                        } else {
+                            settings.soften = 0;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Key::Enter | Key::Char('s') => {
+                return Some(settings);
+            }
+            Key::Esc | Key::Char('q') => {
+                return None;
+            }
+            _ => {}
         }
     }
 }
@@ -1501,7 +1811,7 @@ fn resize_grid(cols: usize, rows: usize) -> Vec<u8> {
     grid
 }
 
-fn burn(palette: &Palette, label: &str, interrupted: Arc<AtomicBool>) {
+fn burn(palette: &Palette, settings: &AnimSettings, label: &str, interrupted: Arc<AtomicBool>) {
     let (mut cols, mut rows) = terminal_size();
     let mut grid = resize_grid(cols, rows);
     let mut rng = Rng::new();
@@ -1513,6 +1823,9 @@ fn burn(palette: &Palette, label: &str, interrupted: Arc<AtomicBool>) {
     let start = Instant::now();
     let source_cool_at = MAX_DURATION.mul_f32(SOURCE_COOL_START);
     let mut frame = String::with_capacity(cols * rows * 8);
+    let mut frame_count = 0u64;
+
+    let frame_delay = Duration::from_millis(1000 / settings.fps as u64);
 
     loop {
         if interrupted.load(Ordering::Relaxed) {
@@ -1532,12 +1845,62 @@ fn burn(palette: &Palette, label: &str, interrupted: Arc<AtomicBool>) {
             frame.reserve(cols * rows * 8);
         }
 
+        // Pulsate base heat if active
+        if elapsed <= source_cool_at {
+            let base_heat = if settings.pulsate {
+                let wave = (frame_count as f32 * 0.08).sin() * 0.5 + 0.5;
+                (16.0 + 20.0 * wave) as u8
+            } else {
+                MAX_HEAT
+            };
+            for x in 0..cols {
+                grid[(rows - 1) * cols + x] = base_heat;
+            }
+        }
+
+        // Inject sparks if active
+        if settings.sparks && elapsed <= source_cool_at && rng.range(0, 99) < 8 {
+            let num_sparks = rng.range(1, 3);
+            for _ in 0..num_sparks {
+                let sx = rng.range(0, cols as i32 - 1) as usize;
+                let sy = rng.range((rows as i32 - 6).max(1), rows as i32 - 2) as usize;
+                grid[sy * cols + sx] = MAX_HEAT;
+            }
+        }
+
+        // Compute wind sway if swaying breeze is active
+        let sway = if settings.wind == 3 {
+            // Oscillate sway between -2 and 2
+            ((frame_count as f32 * 0.05).sin() * 2.0).round() as i32
+        } else {
+            0
+        };
+
         for _ in 0..STEPS_PER_FRAME {
             for x in 0..cols {
                 for y in 1..rows {
                     let below = grid[y * cols + x];
-                    let decay = rng.range(0, 3);
-                    let drift = rng.range(-1, 1);
+                    
+                    // Custom height decay
+                    let decay = match settings.height {
+                        0 => rng.range(1, 4), // Low
+                        1 => rng.range(0, 3), // Medium
+                        2 => rng.range(0, 2), // High
+                        3 => rng.range(0, 1), // Extreme
+                        _ => rng.range(0, 3),
+                    };
+
+                    // Custom wind drift
+                    let drift = match settings.wind {
+                        -2 => rng.range(-2, 0),        // Strong Left
+                        -1 => rng.range(-1, 0),        // Gentle Left
+                        0  => rng.range(-1, 1),        // None
+                        1  => rng.range(0, 1),         // Gentle Right
+                        2  => rng.range(0, 2),         // Strong Right
+                        3  => rng.range(-1 + sway, 1 + sway), // Swaying Breeze
+                        _  => rng.range(-1, 1),
+                    };
+
                     let nx = (x as i32 + drift).clamp(0, cols as i32 - 1) as usize;
                     let new_val = (below as i32 - decay).max(0) as u8;
                     grid[(y - 1) * cols + nx] = new_val;
@@ -1564,7 +1927,8 @@ fn burn(palette: &Palette, label: &str, interrupted: Arc<AtomicBool>) {
             }
         }
 
-        std::thread::sleep(FRAME_DELAY);
+        frame_count += 1;
+        std::thread::sleep(frame_delay);
     }
 
     let _ = write!(out, "{ESC}[?25h"); // always restore cursor
@@ -1607,12 +1971,17 @@ fn install_sigint() -> Arc<AtomicBool> {
 // ---------------------------------------------------------------------
 
 fn main() {
-    let choice = resolve_choice();
-    let palette = build_palette(&choice);
+    let (choice, settings) = resolve_choice();
+    let palette = build_palette(&choice, &settings);
 
     let interrupted = install_sigint();
 
-    burn(&palette, "", interrupted);
+    let label = match &choice {
+        PaletteChoice::Named(name) => name.as_str(),
+        PaletteChoice::Custom { .. } => "custom",
+    };
+
+    burn(&palette, &settings, label, interrupted);
 
     // Final clear — always runs, even after SIGINT (cursor was restored in burn)
     let stdout = io::stdout();
