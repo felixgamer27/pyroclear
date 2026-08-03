@@ -45,6 +45,7 @@ type Palette = [(u8, u8, u8); 37];
 // Punchy rework of the classic Doom fire ramp. The original values
 // (from Fabian Sanglard's write-up) are intentionally muted — these
 // push saturation in the red-to-orange band for a fiercer look.
+// (Final on-screen look is softened/brightened by `soften()` below.)
 const FIRE_PALETTE: Palette = [
     (0x08, 0x00, 0x00), (0x28, 0x02, 0x00), (0x3E, 0x08, 0x00), (0x56, 0x0A, 0x00),
     (0x6E, 0x0C, 0x00), (0x88, 0x10, 0x00), (0x9C, 0x14, 0x00), (0xB2, 0x1A, 0x00),
@@ -61,15 +62,110 @@ const FIRE_PALETTE: Palette = [
 // All named palettes: (id, display-name, description, from-hex, to-hex).
 // "fire" is handled specially (uses FIRE_PALETTE above).
 const NAMED_PALETTES: &[(&str, &str, &str, &str, &str)] = &[
-    ("fire",   "Fire",   "classic ember red → orange → white",  "",         ""        ),
-    ("ice",    "Ice",    "deep cold → electric cyan → white",   "#030a10",  "#c8ffff" ),
-    ("toxic",  "Toxic",  "void black → acid lime → pale",       "#020800",  "#bbff44" ),
-    ("purple", "Purple", "dark void → violet → hot lavender",   "#060010",  "#e060ff" ),
-    ("plasma", "Plasma", "deep violet → magenta → white hot",   "#0a0018",  "#ff50ff" ),
-    ("sunset", "Sunset", "midnight blue → crimson → gold",      "#040010",  "#ffaa00" ),
-    ("ocean",  "Ocean",  "abyssal black → ocean blue → foam",   "#000810",  "#00e8ff" ),
-    ("lava",   "Lava",   "basalt black → blood red → neon orange","#0a0000", "#ff4400" ),
-    ("mono",   "Mono",   "black → dim grey → pure white",       "#080808",  "#ffffff" ),
+    // --- original set, now vivid throughout (fire stays classic) ---
+    ("fire",     "Fire",     "classic ember red → orange → white",       "",         ""        ),
+    ("ice",      "Ice",      "electric blue → brilliant white-cyan",     "#0040ff",  "#c8ffff" ),
+    ("toxic",    "Toxic",    "radioactive green → acid lime",            "#00a020",  "#ccff33" ),
+    ("purple",   "Purple",   "deep violet → hot lavender",               "#6a00c8",  "#e060ff" ),
+    ("plasma",   "Plasma",   "electric violet → magenta white-hot",      "#7000ff",  "#ff60ff" ),
+    ("sunset",   "Sunset",   "royal blue → blazing gold",                "#1a20c0",  "#ffb000" ),
+    ("ocean",    "Ocean",    "deep sapphire → bright aqua",               "#0030a0",  "#00f0ff" ),
+    ("lava",     "Lava",     "molten red → neon orange",                 "#e00010",  "#ff5500" ),
+    ("mono",     "Mono",     "charcoal grey → pure white",               "#404040",  "#ffffff" ),
+    ("gold",     "Gold",     "deep amber → bright gold",                 "#c07000",  "#ffe000" ),
+    ("crimson",  "Crimson",  "blood red → hot pink",                     "#c00020",  "#ff2d80" ),
+    ("emerald",  "Emerald",  "rich green → bright emerald",              "#009040",  "#40ffb0" ),
+    ("mint",     "Mint",     "vivid teal → pale mint",                   "#00a880",  "#b0ffe8" ),
+    ("rose",     "Rose",     "deep rose red → blush white-pink",         "#c02050",  "#ffd6e8" ),
+    ("coral",    "Coral",    "vivid crimson → peach coral",              "#e02818",  "#ffb090" ),
+    ("cobalt",   "Cobalt",   "electric cobalt → sky white",              "#0040d0",  "#d0f0ff" ),
+    ("indigo",   "Indigo",   "deep indigo → periwinkle",                 "#3000c0",  "#a8a0ff" ),
+    ("cyanpunk", "Cyanpunk", "deep cyan → neon white-cyan",              "#00a0a0",  "#40ffff" ),
+    ("copper",   "Copper",   "burnt copper → rose gold",                 "#c04a10",  "#ffb070" ),
+    ("steel",    "Steel",    "slate blue → bright silver",               "#4050708",  "#e0e8f0" ),
+    ("arctic",   "Arctic",   "glacier blue → pure white",                "#1080d0",  "#f0f8ff" ),
+    ("volcano",  "Volcano",  "magma red-orange → cinder white",          "#d02800",  "#fff0e0" ),
+    ("candy",    "Candy",    "hot magenta → cotton candy pink",          "#e000a0",  "#ffc0f0" ),
+    ("midnight", "Midnight", "electric blue → starlight white",          "#0020c0",  "#e8e8ff" ),
+    ("jade",     "Jade",     "vivid jade green → pale seafoam",          "#00a070",  "#c0ffe8" ),
+    ("blood",    "Blood",    "deep blood red → pale ash pink",           "#a00010",  "#f0d0d0" ),
+    ("dawn",     "Dawn",     "royal blue → warm cream-gold",             "#2020d0",  "#ffe0a0" ),
+    ("void",     "Void",     "deep violet → pale lilac",                 "#4000a0",  "#e0d0ff" ),
+    ("aurora",    "Aurora",       "teal glow → violet shimmer",             "#00b8a0", "#8040ff" ),
+    ("flamingo",  "Flamingo",     "hot pink → pale butter yellow",          "#ff2f92", "#fff2b0" ),
+    ("citrus",    "Citrus",       "lime zest → orange peel",                "#aaff20", "#ff8c1a" ),
+    ("bruise",    "Bruise",       "deep purple → sickly yellow-green",      "#3a0060", "#9acc30" ),
+    ("neon80s",   "Neon 80s",     "electric magenta → laser cyan",          "#ff20c0", "#20e0ff" ),
+    ("desertglow",  "Desert Glow",  "warm sand → burnt orange",               "#e8c080", "#e0501a" ),
+    ("glacierfire", "Glacier Fire", "ice blue → flame orange",                "#40c8ff", "#ff6a20" ),
+    ("venom",       "Venom",        "dark viper green → acid yellow",         "#104a20", "#d0ff30" ),
+    ("orchid",      "Orchid",       "deep magenta → soft blush pink",         "#a0006a", "#ffc0e0" ),
+    ("tropical",    "Tropical",     "turquoise water → coral reef",           "#10d0c0", "#ff7a5c" ),
+    ("wildfire",    "Wildfire",     "crimson blaze → golden ember",           "#c8102e", "#ffcc33" ),
+    ("galaxy",      "Galaxy",       "deep indigo → cosmic pink",              "#1a0060", "#ff60c0" ),
+    ("seafoam",     "Seafoam",      "deep teal → pale mint foam",             "#004a4a", "#c0fff0" ),
+    ("bubblegum",   "Bubblegum",    "grape purple → bubblegum pink",          "#7a1aff", "#ff9ad8" ),
+    ("solarflare",  "Solar Flare",  "burnt orange → white-hot yellow",        "#ff5a00", "#fff8c0" ),
+    ("abyss",       "Abyss",        "midnight navy → deep sea teal",          "#000428", "#0a6060" ),
+    ("rust",        "Rust",         "iron oxide brown → sandy tan",           "#7a2c10", "#d8a870" ),
+    ("cherry",      "Cherry",       "dark cherry red → soft pink blush",      "#6a0018", "#ff9ab0" ),
+    ("lagoon",      "Lagoon",       "ocean blue → jungle green",              "#0050a0", "#20c060" ),
+    ("peacock",     "Peacock",      "deep teal → royal purple",               "#005050", "#8020c0" ),
+    ("mango",       "Mango",        "golden orange → tropical yellow",        "#ff8c00", "#fff060" ),
+    ("grape",       "Grape",        "deep grape purple → light lilac",        "#4a0080", "#d0b0ff" ),
+    ("gasflame",    "Gas Flame",    "cool blue flame → white heat",           "#0050ff", "#f0f8ff" ),
+    ("sludge",      "Sludge",       "murky olive → radioactive yellow",       "#3a3a10", "#e0ff20" ),
+    ("rosegold",    "Rose Gold",    "dusty rose → warm gold",                 "#b76e79", "#ffd7a0" ),
+    ("spectrum",    "Spectrum",     "crimson red → deep sky blue",            "#ff1a3c", "#1a8cff" ),
+    ("blush",       "Blush",        "soft coral → pale lavender",             "#ff8a80", "#d8c0ff" ),
+    ("citrine",     "Citrine",      "amber yellow → burnt caramel",           "#ffd700", "#a85a20" ),
+    ("permafrost",  "Permafrost",   "deep glacier blue → pale ice cyan",      "#002a5a", "#c0f0ff" ),
+    ("amethyst",    "Amethyst",     "deep violet gem → soft lilac",           "#4a0e8f", "#c8a0ff" ),
+    ("saffron",        "Saffron",        "saffron yellow → deep crimson",           "#ffb300", "#a4001e" ),
+    ("bioluminescence", "Bioluminescence","deep ocean teal → glowing green",         "#002030", "#40ff90" ),
+    ("dragonfruit",     "Dragonfruit",    "hot pink → lime green",                   "#ff2d6a", "#a0ff30" ),
+    ("obsidianember",   "Obsidian Ember", "near-black red → bright ember orange",    "#1a0500", "#ff7a1a" ),
+    ("lilacmist",       "Lilac Mist",     "soft lilac → deep plum",                  "#d0b0ff", "#5a1080" ),
+    ("tigerlily",       "Tiger Lily",     "vivid orange → deep magenta",             "#ff7000", "#c0006a" ),
+    ("frostbite",       "Frostbite",      "icy white-blue → deep navy",              "#d0f0ff", "#001040" ),
+    ("molten",          "Molten",         "dark charcoal → bright molten gold",      "#201810", "#ffcc00" ),
+    ("nebula",          "Nebula",         "deep violet → pink-orange glow",          "#2a0060", "#ff8060" ),
+    ("kryptonite",      "Kryptonite",     "dark green → radioactive lime",           "#103010", "#baff20" ),
+    ("sakura",          "Sakura",         "deep rose → pale pink blossom",           "#c04070", "#ffe0f0" ),
+    ("inferno",         "Inferno",        "dark maroon → bright yellow",             "#400000", "#ffe000" ),
+    ("glacierpeak",     "Glacier Peak",   "deep teal-blue → pure white",             "#003050", "#ffffff" ),
+    ("voltage",         "Voltage",        "electric yellow → deep blue",             "#fff020", "#1030c0" ),
+    ("mermaid",         "Mermaid",        "deep teal → shimmering aqua",             "#004040", "#40f0d0" ),
+    ("rubygem",         "Ruby Gem",       "deep ruby red → bright pink",             "#700018", "#ff4070" ),
+    ("sunburst",        "Sunburst",       "deep orange → pale yellow",               "#ff6000", "#fff8b0" ),
+    ("twilight",        "Twilight",       "deep indigo → orange glow",               "#200040", "#ff9040" ),
+    ("absinthe",        "Absinthe",       "dark green → pale green-yellow",          "#103018", "#d0ff90" ),
+    ("plumfire",        "Plum Fire",      "deep plum → bright orange",               "#400030", "#ff6020" ),
+    ("iceberg",         "Iceberg",        "pale cyan → deep blue",                   "#b0f0ff", "#002060" ),
+    ("terracotta",      "Terracotta",     "burnt clay → warm cream",                 "#a04020", "#ffe0b0" ),
+    ("neonjungle",      "Neon Jungle",    "deep jungle green → hot pink",            "#002810", "#ff2090" ),
+    ("copperpatina",    "Copper Patina",  "copper brown → teal-green",               "#a05020", "#20a080" ),
+    ("blacklight",      "Blacklight",     "deep purple-black → neon violet",         "#100020", "#b040ff" ),
+    ("sangria",         "Sangria",        "deep wine red → soft pink",               "#500018", "#ffb0c0" ),
+    ("sapphire",        "Sapphire",       "deep sapphire blue → pale sky",           "#002080", "#a0e0ff" ),
+    ("mangotango",      "Mango Tango",    "deep red-orange → bright mango yellow",   "#d02000", "#ffcc30" ),
+    ("periwinkle",      "Periwinkle",     "deep blue-violet → pale periwinkle",      "#3020a0", "#c0c0ff" ),
+    ("embertwilight",   "Ember Twilight", "deep navy → ember orange",                "#000830", "#ff5a1a" ),
+    ("algae",           "Algae",          "dark murky green → bright chartreuse",    "#102010", "#c0ff40" ),
+    ("flamingosunset",  "Flamingo Sunset","deep magenta → golden yellow",            "#c00060", "#ffd000" ),
+    ("deepspace",       "Deep Space",     "true black-blue → starlight blue-white",  "#000018", "#c0d0ff" ),
+    ("honeycomb",       "Honeycomb",      "deep amber-brown → bright honey gold",    "#603010", "#ffcc40" ),
+    ("vipergreen",      "Viper Green",    "dark green-black → bright toxic green",   "#081408", "#90ff40" ),
+    ("bloodmoon",       "Blood Moon",     "deep black-red → pale orange-red",        "#180000", "#ff8060" ),
+    ("cottoncandy",     "Cotton Candy",   "soft sky blue → soft pink",               "#a0d0ff", "#ffb0e0" ),
+    ("magmacore",       "Magma Core",     "dark red-black → bright yellow-orange",   "#200000", "#ffaa00" ),
+    ("deepteal",        "Deep Teal",      "near-black teal → pale seafoam white",    "#001818", "#e0fff8" ),
+    ("royale",          "Royale",         "deep royal purple → gold",                "#300060", "#ffd700" ),
+    ("cyberpink",       "Cyberpink",      "deep black-magenta → neon pink",          "#180010", "#ff30a0" ),
+    ("autumnleaf",      "Autumn Leaf",    "deep brown-red → golden orange",          "#601810", "#ff9020" ),
+    ("moonstone",       "Moonstone",      "pale grey-blue → deep indigo",            "#d0d8ff", "#201060" ),
+    ("hazard",          "Hazard",         "near-black → hazard yellow",              "#101008", "#fff000" ),
+    ("crimsontide",     "Crimson Tide",   "deep crimson → pale foam white",          "#600010", "#fff0f0" ),
 ];
 
 
@@ -145,13 +241,13 @@ fn print_color_list() {
 
     for (id, display, desc, from_hex, to_hex) in NAMED_PALETTES {
         let sw = if *id == "fire" {
-            let p = boost_saturation(&FIRE_PALETTE, 1.65);
+            let p = soften(&FIRE_PALETTE, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN);
             palette_swatch(&p, 28)
         } else {
             let from = hex_to_rgb(from_hex).unwrap_or((0, 0, 0));
             let to = hex_to_rgb(to_hex).unwrap_or((255, 255, 255));
             // Build the full palette so the swatch matches what actually burns
-            let p = boost_saturation(&generate_palette(from, to), 1.65);
+            let p = soften(&generate_palette(from, to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN);
             palette_swatch(&p, 28)
         };
         println!(
@@ -251,13 +347,25 @@ fn generate_palette(from: (u8, u8, u8), to: (u8, u8, u8)) -> Palette {
     out
 }
 
-/// Boost saturation toward 1.0 by `factor`. Applied as a final pass
-/// to every palette to ensure vivid, not pastel, colors.
-fn boost_saturation(palette: &Palette, factor: f32) -> Palette {
+// Final look-adjustment constants. Applied as a pass over every palette
+// right before it's used for a swatch or an actual burn, so what you see
+// in --list-colors / --pick always matches what actually renders.
+//
+// SOFTEN_DESATURATE: multiplies saturation (< 1.0 = less saturated/more washed out)
+// SOFTEN_BRIGHTEN:   pulls value toward 1.0 (white) by this fraction of the remaining headroom
+const SOFTEN_DESATURATE: f32 = 0.62;
+const SOFTEN_BRIGHTEN: f32 = 0.32;
+
+/// Soften a palette: reduce saturation and lift brightness toward white.
+/// Replaces the old `boost_saturation` pass — instead of punchier/more
+/// saturated colors, this produces a brighter, gentler, less-saturated look.
+fn soften(palette: &Palette, desaturate_factor: f32, brighten_factor: f32) -> Palette {
     let mut out = *palette;
     for slot in out.iter_mut() {
         let (h, s, v) = rgb_to_hsv(slot.0, slot.1, slot.2);
-        *slot = hsv_to_rgb(h, (s * factor).clamp(0.0, 1.0), v);
+        let new_s = (s * desaturate_factor).clamp(0.0, 1.0);
+        let new_v = (v + (1.0 - v) * brighten_factor).clamp(0.0, 1.0);
+        *slot = hsv_to_rgb(h, new_s, new_v);
     }
     out
 }
@@ -320,16 +428,6 @@ fn save_config(choice: &PaletteChoice) {
         ),
     };
     let _ = std::fs::write(path, content);
-}
-
-fn choice_display_name(choice: &PaletteChoice) -> String {
-    match choice {
-        PaletteChoice::Named(n) => n.clone(),
-        PaletteChoice::Custom { from, to } => format!(
-            "#{:02x}{:02x}{:02x}→#{:02x}{:02x}{:02x}",
-            from.0, from.1, from.2, to.0, to.1, to.2
-        ),
-    }
 }
 
 fn validate_named(name: &str) -> Result<(), String> {
@@ -421,8 +519,6 @@ fn resolve_choice() -> PaletteChoice {
 }
 
 fn build_palette(choice: &PaletteChoice) -> Palette {
-    const VIVID_FACTOR: f32 = 1.65;
-
     let raw = match choice {
         PaletteChoice::Named(name) => match name.as_str() {
             "fire" => FIRE_PALETTE,
@@ -443,7 +539,7 @@ fn build_palette(choice: &PaletteChoice) -> Palette {
         PaletteChoice::Custom { from, to } => generate_palette(*from, *to),
     };
 
-    boost_saturation(&raw, VIVID_FACTOR)
+    soften(&raw, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
 }
 
 // ---------------------------------------------------------------------
@@ -591,11 +687,11 @@ fn draw_picker(selected: usize, (cols, rows): (usize, usize)) {
         let (name, desc, sw) = if idx < NAMED_PALETTES.len() {
             let (id, display, desc, from_hex, to_hex) = NAMED_PALETTES[idx];
             let p = if id == "fire" {
-                boost_saturation(&FIRE_PALETTE, 1.65)
+                soften(&FIRE_PALETTE, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
             } else {
                 let from = hex_to_rgb(from_hex).unwrap_or((0, 0, 0));
                 let to = hex_to_rgb(to_hex).unwrap_or((255, 255, 255));
-                boost_saturation(&generate_palette(from, to), 1.65)
+                soften(&generate_palette(from, to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
             };
             (display, desc, palette_swatch(&p, swatch_w))
         } else {
@@ -611,8 +707,8 @@ fn draw_picker(selected: usize, (cols, rows): (usize, usize)) {
         }
 
         print!(
-            "  {cursor} {name:<10}  {sw}  {ESC}[38;2;140;140;160m{desc}{ESC}[0m"
-        );
+    "  {cursor} {name:<18}    {sw}  {ESC}[38;2;140;140;160m{desc}{ESC}[0m"
+    );
 
         if is_selected {
             // Fill rest of line with selection background
@@ -883,12 +979,11 @@ fn install_sigint() -> Arc<AtomicBool> {
 
 fn main() {
     let choice = resolve_choice();
-    let label = choice_display_name(&choice);
     let palette = build_palette(&choice);
 
     let interrupted = install_sigint();
 
-    burn(&palette, &label, interrupted);
+    burn(&palette, "", interrupted);
 
     // Final clear — always runs, even after SIGINT (cursor was restored in burn)
     let stdout = io::stdout();
