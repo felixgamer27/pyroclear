@@ -1,6 +1,6 @@
 # pyroclear
 
-A high-fidelity terminal `clear` replacement that burns your screen down before wiping it. Watch a physically-simulated fire climb, decay, and vanish before cleanly clearing your shell.
+A terminal `clear` replacement that burns your screen down before wiping it. 
 
 Written in modern Rust. Zero runtime dependencies beyond `libc`. Highly optimized, flicker-free, and customizable.
 
@@ -60,7 +60,7 @@ pyroclear [OPTIONS]
 
 | Option | Description | Example |
 | :--- | :--- | :--- |
-| **`--start`** | Open the premium onboarding presentation & guide | `pyroclear --start` |
+| **`--start`** | Open the onboarding presentation & guide | `pyroclear --start` |
 | **`--settings`, `-s`** | Adjust FPS, wind direction, and flame height decay | `pyroclear --settings` |
 | **`--pick`, `-p`** | Interactive color palette picker with live swatches | `pyroclear --pick` |
 | **`--custom`** | TUI to save, name, manage and run custom gradients | `pyroclear --custom` |
