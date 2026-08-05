@@ -22,7 +22,13 @@ Written in modern Rust. Zero runtime dependencies beyond `libc`. Highly optimize
 
 ## Installation
 
-Building from source requires Cargo:
+Install via Cargo:
+
+```bash
+cargo install pyroclear
+```
+
+Or build from source:
 
 ```bash
 # Clone the repository
