@@ -2,6 +2,13 @@
 name = "pyroclear"
 version = "0.1.0"
 edition = "2021"
+description = "Watch your terminal go up in flames! A fire animation for clearing your terminal."
+license = "MIT"
+homepage = "https://github.com/shreyanth-sureshkrishnaa/pyroclear"
+repository = "https://github.com/shreyanth-sureshkrishnaa/pyroclear"
+readme = "README.md"
+keywords = ["cli", "utility", "terminal", "fire", "animation"]
+categories = ["command-line-utilities"]
 
 [[bin]]
 name = "pyroclear"
