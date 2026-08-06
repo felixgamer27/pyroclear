@@ -2,21 +2,21 @@
 
 A terminal `clear` replacement that burns your screen down before wiping it. 
 
-Written in modern Rust. Zero runtime dependencies beyond `libc`. Highly optimized, flicker-free, and customizable.
+Written in modern Rust. Zero runtime dependencies beyond standard `libc` (Unix) or native Win32 API calls (Windows). Highly optimized, flicker-free, and customizable.
 
 ---
 
 ## Features
 
-- **Live Resize Support**: Queries terminal size on the fly via direct `ioctl` syscalls — no subprocesses. The grid adjusts instantly as you resize.
+- **Platform Native**: Native Unix support (via direct `ioctl` syscalls and `termios` configuration) and native Windows support (via hand-rolled Win32 console API bindings for raw mode, virtual terminal processing, and console control handlers). Zero third-party runtime dependencies.
 - **Transparent Background**: Empty cells inherit your terminal's default theme/opacity instead of drawing solid black rectangles.
 - **300+ Built-in Palettes**: Categorized beautifully in `--list-colors` with aligned swatches.
 - **Interactive TUIs**:
   - **Color Picker (`--pick`)**: Browse, search, filter, and preview palettes in real-time.
   - **Settings Manager (`--settings`)**: Adjust FPS, wind/drift, and flame height in raw mode.
   - **Custom Palette Manager (`--custom`)**: Build, name, delete, and save your own hex gradients.
-- **Persistent Configuration**: Settings and palettes are automatically written to `~/.config/pyroclear/config.toml`.
-- **Signal-safe**: Interrupted runs (Ctrl-C) restore the terminal state and cursor cleanly.
+- **Persistent Configuration**: Settings and palettes are automatically saved to `~/.config/pyroclear/config.toml` (using `$HOME` or user profile).
+- **Signal-safe**: Interrupted runs (Ctrl-C) restore the terminal state and cursor cleanly (via custom Unix SIGINT handlers / Windows console control handlers).
 
 ---
 
@@ -35,23 +35,29 @@ Or build from source:
 git clone https://github.com/shreyanth-sureshkrishnaa/pyroclear.git
 cd pyroclear
 
-# Build and install to ~/.cargo/bin
+# Build and install (installs to your Cargo bin folder, e.g. ~/.cargo/bin)
 cargo build --release
 cargo install --path .
 ```
 
 ### Wire it up as `clear`
 
-**Bash / Zsh**
+**Bash / Zsh (Linux, macOS, Git Bash on Windows)**
 ```bash
-# Append to ~/.bashrc or ~/.zshrc
+# Append to ~/.bashrc, ~/.zshrc, or ~/.bash_profile
 alias clear="pyroclear"
 ```
 
-**Fish**
+**Fish (Linux / macOS)**
 ```fish
 # Append to ~/.config/fish/config.fish
 alias -s clear="pyroclear"
+```
+
+**PowerShell (Windows)**
+```powershell
+# Append to your PowerShell profile ($PROFILE)
+Set-Alias -Name clear -Value pyroclear -Force
 ```
 
 ---
@@ -84,10 +90,8 @@ pyroclear [OPTIONS]
 ## Configuration
 
 Your preferences are saved in:
-`~/.config/pyroclear/config.toml`
-
-Custom palettes created in the TUI are stored in:
-`~/.config/pyroclear/custom_palettes.toml`
+- **Unix**: `~/.config/pyroclear/config.toml` (and `custom_palettes.toml` for custom palettes)
+- **Windows**: `%USERPROFILE%\.config\pyroclear\config.toml` (and `custom_palettes.toml` for custom palettes, resolved using `$HOME`)
 
 ---
 
