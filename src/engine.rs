@@ -116,7 +116,8 @@ pub fn burn(palette: &Palette, settings: &AnimSettings, interrupted: Arc<AtomicB
 
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    let _ = write!(out, "{ESC}[?25l{ESC}[2J"); // hide cursor, clear screen
+    // Hide cursor + full clear (screen + scrollback) so no residual content
+    let _ = write!(out, "{ESC}[?25l{ESC}[0m{ESC}[H{ESC}[2J{ESC}[3J");
 
     let start          = Instant::now();
     let source_cool_at = MAX_DURATION.mul_f32(SOURCE_COOL_START);

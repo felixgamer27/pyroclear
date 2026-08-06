@@ -17,6 +17,7 @@ Written in modern Rust. Zero runtime dependencies beyond standard `libc` (Unix) 
   - **Custom Palette Manager (`--custom`)**: Build, name, delete, and save your own hex gradients.
 - **Persistent Configuration**: Settings and palettes are automatically saved to `~/.config/pyroclear/config.toml` (using `$HOME` or user profile).
 - **Signal-safe**: Interrupted runs (Ctrl-C) restore the terminal state and cursor cleanly (via custom Unix SIGINT handlers / Windows console control handlers).
+- **Full terminal clear**: Erases both the visible screen **and** the scrollback buffer (via `\x1b[3J`) so nothing remains after the flames die out.
 
 ---
 
