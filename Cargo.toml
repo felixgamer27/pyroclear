@@ -14,7 +14,7 @@ categories = ["command-line-utilities"]
 name = "pyroclear"
 path = "src/main.rs"
 
-[dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 [profile.release]

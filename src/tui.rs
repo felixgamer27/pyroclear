@@ -1,28 +1,38 @@
 // tui.rs — raw terminal, key input, interactive picker & settings TUI.
 
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::time::Duration;
 use crate::{ESC, palettes::*, config::{AnimSettings, PaletteChoice}, engine::{terminal_size, Rng}};
 
 // ── Raw terminal guard ────────────────────────────────────────────────
 
-/// RAII guard: enters raw mode on creation, restores termios on drop.
+/// RAII guard: enters raw mode on creation, restores the terminal on drop.
 /// Also switches to the alternate screen buffer.
 pub struct TermRawGuard {
+    #[cfg(unix)]
     orig: libc::termios,
+    #[cfg(windows)]
+    orig: crate::win::RawConsole,
 }
 
 impl TermRawGuard {
     pub fn enter() -> io::Result<Self> {
-        let mut orig: libc::termios = unsafe { std::mem::zeroed() };
-        if unsafe { libc::tcgetattr(libc::STDIN_FILENO, &mut orig) } != 0 {
-            return Err(io::Error::last_os_error());
-        }
-        let mut raw = orig;
-        raw.c_lflag &= !(libc::ICANON | libc::ECHO | libc::ISIG);
-        raw.c_cc[libc::VMIN]  = 1;
-        raw.c_cc[libc::VTIME] = 0;
-        unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &raw) };
+        #[cfg(unix)]
+        let orig = {
+            let mut orig: libc::termios = unsafe { std::mem::zeroed() };
+            if unsafe { libc::tcgetattr(libc::STDIN_FILENO, &mut orig) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            let mut raw = orig;
+            raw.c_lflag &= !(libc::ICANON | libc::ECHO | libc::ISIG);
+            raw.c_cc[libc::VMIN]  = 1;
+            raw.c_cc[libc::VTIME] = 0;
+            unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &raw) };
+            orig
+        };
+        #[cfg(windows)]
+        let orig = crate::win::enter_raw()?;
+
         print!("{ESC}[?1049h{ESC}[?25l"); // alternate screen, hide cursor
         io::stdout().flush().ok();
         Ok(Self { orig })
@@ -33,7 +43,10 @@ impl Drop for TermRawGuard {
     fn drop(&mut self) {
         print!("{ESC}[?1049l{ESC}[?25h"); // restore screen and cursor
         io::stdout().flush().ok();
+        #[cfg(unix)]
         unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &self.orig) };
+        #[cfg(windows)]
+        crate::win::leave_raw(&self.orig);
     }
 }
 
@@ -52,8 +65,8 @@ pub enum Key {
 
 pub fn read_key() -> Key {
     let mut buf = [0u8; 6];
-    let n = unsafe { libc::read(libc::STDIN_FILENO, buf.as_mut_ptr() as *mut _, 6) };
-    if n <= 0 { return Key::Other; }
+    let n = std::io::stdin().read(&mut buf).unwrap_or(0);
+    if n == 0 { return Key::Other; }
     match &buf[..n as usize] {
         [0x1b, b'[', b'A', ..] => Key::Up,
         [0x1b, b'[', b'B', ..] => Key::Down,

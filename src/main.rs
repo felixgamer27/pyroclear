@@ -7,10 +7,10 @@
 // Whole frame is redrawn each tick via ANSI cursor-home, so no
 // flicker and no need for a TUI crate.
 //
-// Terminal size is read via ioctl(TIOCGWINSZ) every frame (cheap
-// syscall, no subprocess spawn), so the grid follows you live if
-// you resize mid-burn. Randomness is a tiny xorshift64* PRNG seeded
-// off the clock — no `rand` crate needed.
+// Terminal size is read via ioctl(TIOCGWINSZ) on unix / the Win32
+// console API on Windows every frame (cheap, no subprocess spawn), so
+// the grid follows you live if you resize mid-burn. Randomness is a
+// tiny xorshift64* PRNG seeded off the clock — no `rand` crate needed.
 //
 // MODULE LAYOUT
 //   palettes  — palette data, color math, swatch renderers
@@ -18,6 +18,7 @@
 //   display   — banner, help, info, start guide, color list
 //   engine    — PRNG, terminal size, fire simulation loop
 //   tui       — raw terminal, key input, picker & settings TUIs
+//   win       — hand-rolled Win32 console bindings (Windows only)
 
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -31,6 +32,8 @@ pub mod config;
 pub mod display;
 pub mod engine;
 pub mod tui;
+#[cfg(windows)]
+pub mod win;
 
 use config::{build_palette, resolve_choice};
 use engine::burn;
@@ -39,16 +42,28 @@ use engine::burn;
 
 static SIGINT_FIRED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(unix)]
 extern "C" fn sigint_handler(_: libc::c_int) {
     SIGINT_FIRED.store(true, Ordering::Relaxed);
+}
+
+#[cfg(windows)]
+unsafe extern "system" fn ctrl_handler(_: u32) -> i32 {
+    SIGINT_FIRED.store(true, Ordering::Relaxed);
+    1
 }
 
 fn install_sigint() -> Arc<AtomicBool> {
     let flag  = Arc::new(AtomicBool::new(false));
     let flag2 = Arc::clone(&flag);
 
+    #[cfg(unix)]
     unsafe {
         libc::signal(libc::SIGINT, sigint_handler as *const () as libc::sighandler_t);
+    }
+    #[cfg(windows)]
+    unsafe {
+        crate::win::SetConsoleCtrlHandler(ctrl_handler, 1);
     }
 
     std::thread::spawn(move || loop {

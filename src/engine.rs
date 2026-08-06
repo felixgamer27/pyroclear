@@ -45,6 +45,7 @@ impl Rng {
 // ── Terminal size ─────────────────────────────────────────────────────
 
 pub fn terminal_size() -> (usize, usize) {
+    #[cfg(unix)]
     unsafe {
         let mut ws: libc::winsize = std::mem::zeroed();
         if libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ, &mut ws) == 0
@@ -53,6 +54,10 @@ pub fn terminal_size() -> (usize, usize) {
         {
             return (ws.ws_col as usize, ws.ws_row as usize);
         }
+    }
+    #[cfg(windows)]
+    if let Some((w, h)) = crate::win::terminal_size() {
+        return (w, h);
     }
     (80, 24)
 }
