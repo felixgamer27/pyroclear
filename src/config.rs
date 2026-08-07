@@ -8,14 +8,15 @@ use crate::{ESC, palettes::*, tui::{interactive_pick, interactive_settings, inte
 
 #[derive(Clone)]
 pub struct AnimSettings {
-    pub fps:    u32,
-    pub wind:   i32, // -2..=2 (Strong Left → Strong Right); 0 = None
-    pub height: i32, // 0 = Low, 1 = Medium, 2 = High, 3 = Extreme
+    pub fps:       u32,
+    pub wind:      i32,  // -2..=2 (Strong Left → Strong Right); 0 = None
+    pub height:    i32,  // 0 = Low, 1 = Medium, 2 = High, 3 = Extreme
+    pub direction: bool, // false = bottom-up (default), true = top-down
 }
 
 impl Default for AnimSettings {
     fn default() -> Self {
-        Self { fps: 60, wind: 0, height: 1 }
+        Self { fps: 60, wind: 0, height: 1, direction: false }
     }
 }
 
@@ -79,9 +80,10 @@ pub fn load_config() -> (Option<PaletteChoice>, AnimSettings) {
                 "palette" => palette = Some(val),
                 "from"    => from    = Some(val),
                 "to"      => to      = Some(val),
-                "fps"     => if let Ok(n) = val.parse::<u32>() { settings.fps    = n; },
-                "wind"    => if let Ok(n) = val.parse::<i32>() { settings.wind   = n.clamp(-2, 2); },
-                "height"  => if let Ok(n) = val.parse::<i32>() { settings.height = n.clamp(0, 3); },
+                "fps"       => if let Ok(n) = val.parse::<u32>()  { settings.fps       = n; },
+                "wind"      => if let Ok(n) = val.parse::<i32>()  { settings.wind      = n.clamp(-2, 2); },
+                "height"    => if let Ok(n) = val.parse::<i32>()  { settings.height    = n.clamp(0, 3); },
+                "direction" => if let Ok(b) = val.parse::<bool>() { settings.direction = b; },
                 _ => {}
             }
         }
@@ -116,9 +118,10 @@ pub fn save_config(choice: &PaletteChoice, settings: &AnimSettings) {
         }
     }
     content.push_str("\n[animation]\n");
-    content.push_str(&format!("fps = {}\n", settings.fps));
-    content.push_str(&format!("wind = {}\n", settings.wind));
-    content.push_str(&format!("height = {}\n", settings.height));
+    content.push_str(&format!("fps       = {}\n", settings.fps));
+    content.push_str(&format!("wind      = {}\n", settings.wind));
+    content.push_str(&format!("height    = {}\n", settings.height));
+    content.push_str(&format!("direction = {}\n", settings.direction));
     let _ = std::fs::write(path, content);
 }
 

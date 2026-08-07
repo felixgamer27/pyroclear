@@ -425,6 +425,11 @@ fn draw_settings(selected: usize, settings: &AnimSettings, (cols, rows): (usize,
             3 => "Extreme       (minimum decay, full screen)",
             _ => "unknown height",
         }),
+        ("Fire Direction ", if settings.direction {
+            "Top → Bottom  (falling fire effect)"
+        } else {
+            "Bottom → Top  (classic rising flames)"
+        }),
     ];
 
     let start_row = 3u16;
@@ -481,7 +486,7 @@ pub fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
 
         match read_key() {
             Key::Up   => { if selected > 0 { selected -= 1; } }
-            Key::Down => { if selected < 2 { selected += 1; } }
+            Key::Down => { if selected < 3 { selected += 1; } }
             Key::Left => {
                 match selected {
                     0 => {
@@ -498,6 +503,9 @@ pub fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
                     }
                     2 => {
                         settings.height = if settings.height > 0 { settings.height - 1 } else { 3 };
+                    }
+                    3 => {
+                        settings.direction = !settings.direction;
                     }
                     _ => {}
                 }
@@ -518,6 +526,9 @@ pub fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
                     }
                     2 => {
                         settings.height = if settings.height < 3 { settings.height + 1 } else { 0 };
+                    }
+                    3 => {
+                        settings.direction = !settings.direction;
                     }
                     _ => {}
                 }
