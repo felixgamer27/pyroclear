@@ -1,29 +1,40 @@
 // config.rs — AnimSettings, PaletteChoice, config I/O, CLI parsing.
 
+use crate::{
+    palettes::*,
+    tui::{interactive_custom, interactive_pick, interactive_settings},
+    ESC,
+};
 use std::path::PathBuf;
-use crate::{ESC, palettes::*, tui::{interactive_pick, interactive_settings, interactive_custom}};
-
 
 // ── Data types ────────────────────────────────────────────────────────
 
 #[derive(Clone)]
 pub struct AnimSettings {
-    pub fps:       u32,
-    pub wind:      i32,  // -2..=2 (Strong Left → Strong Right); 0 = None
-    pub height:    i32,  // 0 = Low, 1 = Medium, 2 = High, 3 = Extreme
+    pub fps: u32,
+    pub wind: i32,       // -2..=2 (Strong Left → Strong Right); 0 = None
+    pub height: i32,     // 0 = Low, 1 = Medium, 2 = High, 3 = Extreme
     pub direction: bool, // false = bottom-up (default), true = top-down
 }
 
 impl Default for AnimSettings {
     fn default() -> Self {
-        Self { fps: 60, wind: 0, height: 1, direction: false }
+        Self {
+            fps: 60,
+            wind: 0,
+            height: 1,
+            direction: false,
+        }
     }
 }
 
 #[derive(Clone)]
 pub enum PaletteChoice {
     Named(String),
-    Custom { from: (u8, u8, u8), to: (u8, u8, u8) },
+    Custom {
+        from: (u8, u8, u8),
+        to: (u8, u8, u8),
+    },
 }
 
 // ── Custom palette storage path ──────────────────────────────────────
@@ -45,16 +56,16 @@ pub fn custom_palettes_path() -> Option<PathBuf> {
 
 #[derive(Clone, Debug)]
 pub struct CustomPaletteEntry {
-    pub name:    String, // slug / id (no spaces)
+    pub name: String,    // slug / id (no spaces)
     pub display: String, // human-readable display name
-    pub from:    String, // hex e.g. "#ff0000"
-    pub to:      String, // hex e.g. "#ffffff"
+    pub from: String,    // hex e.g. "#ff0000"
+    pub to: String,      // hex e.g. "#ffffff"
 }
 
 impl CustomPaletteEntry {
     pub fn to_palette_choice(&self) -> Option<PaletteChoice> {
         let from = hex_to_rgb(&self.from)?;
-        let to   = hex_to_rgb(&self.to)?;
+        let to = hex_to_rgb(&self.to)?;
         Some(PaletteChoice::Custom { from, to })
     }
 }
@@ -64,26 +75,48 @@ impl CustomPaletteEntry {
 pub fn load_config() -> (Option<PaletteChoice>, AnimSettings) {
     let mut choice = None;
     let mut settings = AnimSettings::default();
-    let Some(path) = config_path() else { return (None, settings); };
-    let Ok(content) = std::fs::read_to_string(path) else { return (None, settings); };
+    let Some(path) = config_path() else {
+        return (None, settings);
+    };
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return (None, settings);
+    };
 
     let mut palette = None;
-    let mut from    = None;
-    let mut to      = None;
+    let mut from = None;
+    let mut to = None;
 
     for raw in content.lines() {
         let line = raw.trim();
-        if line.is_empty() || line.starts_with('[') || line.starts_with('#') { continue; }
+        if line.is_empty() || line.starts_with('[') || line.starts_with('#') {
+            continue;
+        }
         if let Some((k, v)) = line.split_once('=') {
             let val = v.trim().trim_matches('"').to_string();
             match k.trim() {
                 "palette" => palette = Some(val),
-                "from"    => from    = Some(val),
-                "to"      => to      = Some(val),
-                "fps"       => if let Ok(n) = val.parse::<u32>()  { settings.fps       = n; },
-                "wind"      => if let Ok(n) = val.parse::<i32>()  { settings.wind      = n.clamp(-2, 2); },
-                "height"    => if let Ok(n) = val.parse::<i32>()  { settings.height    = n.clamp(0, 3); },
-                "direction" => if let Ok(b) = val.parse::<bool>() { settings.direction = b; },
+                "from" => from = Some(val),
+                "to" => to = Some(val),
+                "fps" => {
+                    if let Ok(n) = val.parse::<u32>() {
+                        settings.fps = n.max(1);
+                    }
+                }
+                "wind" => {
+                    if let Ok(n) = val.parse::<i32>() {
+                        settings.wind = n.clamp(-2, 2);
+                    }
+                }
+                "height" => {
+                    if let Ok(n) = val.parse::<i32>() {
+                        settings.height = n.clamp(0, 3);
+                    }
+                }
+                "direction" => {
+                    if let Ok(b) = val.parse::<bool>() {
+                        settings.direction = b;
+                    }
+                }
                 _ => {}
             }
         }
@@ -102,7 +135,9 @@ pub fn load_config() -> (Option<PaletteChoice>, AnimSettings) {
 
 pub fn save_config(choice: &PaletteChoice, settings: &AnimSettings) {
     let Some(path) = config_path() else { return };
-    if let Some(parent) = path.parent() { let _ = std::fs::create_dir_all(parent); }
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
     let mut content = String::new();
     match choice {
         PaletteChoice::Named(name) => {
@@ -128,54 +163,85 @@ pub fn save_config(choice: &PaletteChoice, settings: &AnimSettings) {
 // ── Custom palette I/O ────────────────────────────────────────────────
 
 pub fn load_custom_palettes() -> Vec<CustomPaletteEntry> {
-    let Some(path) = custom_palettes_path() else { return vec![]; };
-    let Ok(content) = std::fs::read_to_string(&path) else { return vec![]; };
+    let Some(path) = custom_palettes_path() else {
+        return vec![];
+    };
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return vec![];
+    };
 
     let mut entries: Vec<CustomPaletteEntry> = Vec::new();
-    let mut cur_name    = String::new();
+    let mut cur_name = String::new();
     let mut cur_display = String::new();
-    let mut cur_from    = String::new();
-    let mut cur_to      = String::new();
+    let mut cur_from = String::new();
+    let mut cur_to = String::new();
 
     let flush = |entries: &mut Vec<CustomPaletteEntry>,
-                 name: &mut String, display: &mut String,
-                 from: &mut String, to: &mut String| {
+                 name: &mut String,
+                 display: &mut String,
+                 from: &mut String,
+                 to: &mut String| {
         if !name.is_empty() && !from.is_empty() && !to.is_empty() {
             entries.push(CustomPaletteEntry {
-                name:    std::mem::take(name),
-                display: if display.is_empty() { name.clone() } else { std::mem::take(display) },
-                from:    std::mem::take(from),
-                to:      std::mem::take(to),
+                name: std::mem::take(name),
+                display: if display.is_empty() {
+                    name.clone()
+                } else {
+                    std::mem::take(display)
+                },
+                from: std::mem::take(from),
+                to: std::mem::take(to),
             });
         }
-        name.clear(); display.clear(); from.clear(); to.clear();
+        name.clear();
+        display.clear();
+        from.clear();
+        to.clear();
     };
 
     for raw in content.lines() {
         let line = raw.trim();
         if line == "[[palette]]" {
-            flush(&mut entries, &mut cur_name, &mut cur_display, &mut cur_from, &mut cur_to);
+            flush(
+                &mut entries,
+                &mut cur_name,
+                &mut cur_display,
+                &mut cur_from,
+                &mut cur_to,
+            );
             continue;
         }
-        if line.is_empty() || line.starts_with('#') { continue; }
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
         if let Some((k, v)) = line.split_once('=') {
             let val = v.trim().trim_matches('"').to_string();
             match k.trim() {
-                "name"    => cur_name    = val,
+                "name" => cur_name = val,
                 "display" => cur_display = val,
-                "from"    => cur_from    = val,
-                "to"      => cur_to      = val,
+                "from" => cur_from = val,
+                "to" => cur_to = val,
                 _ => {}
             }
         }
     }
-    flush(&mut entries, &mut cur_name, &mut cur_display, &mut cur_from, &mut cur_to);
+    flush(
+        &mut entries,
+        &mut cur_name,
+        &mut cur_display,
+        &mut cur_from,
+        &mut cur_to,
+    );
     entries
 }
 
 pub fn save_custom_palettes(entries: &[CustomPaletteEntry]) {
-    let Some(path) = custom_palettes_path() else { return };
-    if let Some(parent) = path.parent() { let _ = std::fs::create_dir_all(parent); }
+    let Some(path) = custom_palettes_path() else {
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
     let mut content = String::new();
     for e in entries {
         content.push_str("[[palette]]\n");
@@ -219,19 +285,19 @@ pub fn build_palette(choice: &PaletteChoice) -> Palette {
     let raw = match choice {
         PaletteChoice::Named(name) => match name.as_str() {
             "fire" => FIRE_PALETTE,
-            other  => {
+            other => {
                 if let Some((_, _, _, from_hex, to_hex)) =
                     NAMED_PALETTES.iter().find(|(id, _, _, _, _)| *id == other)
                 {
                     let from = hex_to_rgb(from_hex).unwrap_or((0, 0, 0));
-                    let to   = hex_to_rgb(to_hex).unwrap_or((255, 255, 255));
+                    let to = hex_to_rgb(to_hex).unwrap_or((255, 255, 255));
                     generate_palette(from, to)
                 } else {
                     // Try looking in custom saved palettes
                     let custom = load_custom_palettes();
                     if let Some(entry) = custom.iter().find(|e| e.name == other) {
                         let from = hex_to_rgb(&entry.from).unwrap_or((0, 0, 0));
-                        let to   = hex_to_rgb(&entry.to).unwrap_or((255, 255, 255));
+                        let to = hex_to_rgb(&entry.to).unwrap_or((255, 255, 255));
                         generate_palette(from, to)
                     } else {
                         FIRE_PALETTE
@@ -251,30 +317,43 @@ fn parse_args() -> (Option<PaletteChoice>, bool) {
     use crate::display::*;
 
     let args: Vec<String> = std::env::args().collect();
-    let mut color        = None;
-    let mut from         = None;
-    let mut to           = None;
+    let mut color = None;
+    let mut from = None;
+    let mut to = None;
     let mut run_settings = false;
 
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
-            "--color" | "-c" => { i += 1; color = args.get(i).cloned(); }
-            "--from"         => { i += 1; from  = args.get(i).cloned(); }
-            "--to"           => { i += 1; to    = args.get(i).cloned(); }
-            "--list-colors" | "--list" => { print_color_list(); std::process::exit(0); }
-            "--pick" | "-p"  => {
-                match interactive_pick() {
-                    Some(c) => return (Some(c), false),
-                    None    => std::process::exit(0),
-                }
+            "--color" | "-c" => {
+                i += 1;
+                color = args.get(i).cloned();
             }
-            "--settings" | "-s" => { run_settings = true; }
-            "--random"   | "-r" => {
+            "--from" => {
+                i += 1;
+                from = args.get(i).cloned();
+            }
+            "--to" => {
+                i += 1;
+                to = args.get(i).cloned();
+            }
+            "--list-colors" | "--list" => {
+                print_color_list();
+                std::process::exit(0);
+            }
+            "--pick" | "-p" => match interactive_pick() {
+                Some(c) => return (Some(c), false),
+                None => std::process::exit(0),
+            },
+            "--settings" | "-s" => {
+                run_settings = true;
+            }
+            "--random" | "-r" => {
                 let c = random_palette_choice();
                 if let PaletteChoice::Named(ref name) = c {
-                    if let Some((_, display, _, _, _)) =
-                        NAMED_PALETTES.iter().find(|(id, _, _, _, _)| *id == name.as_str())
+                    if let Some((_, display, _, _, _)) = NAMED_PALETTES
+                        .iter()
+                        .find(|(id, _, _, _, _)| *id == name.as_str())
                     {
                         eprintln!(
                             "  {ESC}[38;2;255;200;80m◆ Random:{ESC}[0m \
@@ -295,18 +374,28 @@ fn parse_args() -> (Option<PaletteChoice>, bool) {
                 );
                 return (Some(c), false);
             }
-            "--custom"      => {
-                match interactive_custom() {
-                    Some(c) => return (Some(c), false),
-                    None    => std::process::exit(0),
-                }
+            "--custom" => match interactive_custom() {
+                Some(c) => return (Some(c), false),
+                None => std::process::exit(0),
+            },
+            "--start" => {
+                print_start();
+                std::process::exit(0);
             }
-            "--start"       => { print_start();   std::process::exit(0); }
-            "--info" | "-i" => { print_info();    std::process::exit(0); }
-            "--version" | "-V" => { print_version(); std::process::exit(0); }
-            "-h" | "--help" => { print_help();    std::process::exit(0); }
-            "--no-save"     => {} // detected separately via has_no_save()
-            _               => {}
+            "--info" | "-i" => {
+                print_info();
+                std::process::exit(0);
+            }
+            "--version" | "-V" => {
+                print_version();
+                std::process::exit(0);
+            }
+            "-h" | "--help" => {
+                print_help();
+                std::process::exit(0);
+            }
+            "--no-save" => {} // detected separately via has_no_save()
+            _ => {}
         }
         i += 1;
     }
@@ -352,7 +441,8 @@ pub fn resolve_choice() -> (PaletteChoice, AnimSettings) {
         if let Some(new_settings) = interactive_settings(&settings) {
             settings = new_settings;
             if !has_no_save() {
-                let active_choice = parsed_choice.clone()
+                let active_choice = parsed_choice
+                    .clone()
                     .or_else(|| saved_choice.clone())
                     .unwrap_or(PaletteChoice::Named("fire".to_string()));
                 save_config(&active_choice, &settings);
@@ -363,9 +453,14 @@ pub fn resolve_choice() -> (PaletteChoice, AnimSettings) {
     }
 
     if let Some(choice) = parsed_choice {
-        if !has_no_save() { save_config(&choice, &settings); }
+        if !has_no_save() {
+            save_config(&choice, &settings);
+        }
         return (choice, settings);
     }
 
-    (saved_choice.unwrap_or(PaletteChoice::Named("fire".to_string())), settings)
+    (
+        saved_choice.unwrap_or(PaletteChoice::Named("fire".to_string())),
+        settings,
+    )
 }

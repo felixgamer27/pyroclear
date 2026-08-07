@@ -1,6 +1,10 @@
 // display.rs — banner, help, info, start, and color-list output.
 
-use crate::{ESC, palettes::*, config::{PaletteChoice, load_config}};
+use crate::{
+    config::{load_config, PaletteChoice},
+    palettes::*,
+    ESC,
+};
 
 pub const VERSION: &str = "0.1.0";
 
@@ -16,10 +20,10 @@ pub fn print_banner() {
         "  ╚═╝        ╚═╝   ╚═╝  ╚═╝ ╚═════╝  ╚═════╝╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝",
     ];
     let colors: [(u8, u8, u8); 6] = [
-        (200,  8,   0),
-        (228,  45,  0),
-        (246,  90,  0),
-        (252, 140,  5),
+        (200, 8, 0),
+        (228, 45, 0),
+        (246, 90, 0),
+        (252, 140, 5),
         (255, 185, 18),
         (255, 225, 48),
     ];
@@ -57,15 +61,20 @@ pub fn print_info() {
     println!("  {ESC}[1;38;2;255;200;80mActive Palette{ESC}[0m\n");
     match &choice {
         PaletteChoice::Named(name) => {
-            if let Some((id, display, desc, from_hex, to_hex)) =
-                NAMED_PALETTES.iter().find(|(i, _, _, _, _)| *i == name.as_str())
+            if let Some((id, display, desc, from_hex, to_hex)) = NAMED_PALETTES
+                .iter()
+                .find(|(i, _, _, _, _)| *i == name.as_str())
             {
                 let from = hex_to_rgb(from_hex).unwrap_or((0, 0, 0));
-                let to   = hex_to_rgb(to_hex).unwrap_or((255, 255, 255));
+                let to = hex_to_rgb(to_hex).unwrap_or((255, 255, 255));
                 let p = if *id == "fire" {
                     soften(&FIRE_PALETTE, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
                 } else {
-                    soften(&generate_palette(from, to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
+                    soften(
+                        &generate_palette(from, to),
+                        SOFTEN_DESATURATE,
+                        SOFTEN_BRIGHTEN,
+                    )
                 };
                 let sw = palette_swatch(&p, 44);
                 println!("  {ESC}[1;38;2;255;255;255m{display}{ESC}[0m  {ESC}[38;2;75;75;95m({id}){ESC}[0m");
@@ -81,8 +90,12 @@ pub fn print_info() {
         }
         PaletteChoice::Custom { from, to } => {
             let fh = format!("#{:02x}{:02x}{:02x}", from.0, from.1, from.2);
-            let th = format!("#{:02x}{:02x}{:02x}", to.0,   to.1,   to.2);
-            let p  = soften(&generate_palette(*from, *to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN);
+            let th = format!("#{:02x}{:02x}{:02x}", to.0, to.1, to.2);
+            let p = soften(
+                &generate_palette(*from, *to),
+                SOFTEN_DESATURATE,
+                SOFTEN_BRIGHTEN,
+            );
             let sw = palette_swatch(&p, 44);
             println!("  {ESC}[1;38;2;255;255;255mCustom gradient{ESC}[0m");
             println!("  {sw}\n");
@@ -108,17 +121,22 @@ pub fn print_help() {
 
     sec("USAGE");
     println!("    {ESC}[38;2;200;200;220mpyroclear {ESC}[38;2;130;130;155m[OPTIONS]{ESC}[0m");
-    println!("    {ESC}[38;2;82;82;105m(no flags: burn with the saved palette, default is fire){ESC}[0m");
+    println!(
+        "    {ESC}[38;2;82;82;105m(no flags: burn with the saved palette, default is fire){ESC}[0m"
+    );
 
     sec("MODES");
     let modes: &[(&str, &str)] = &[
-        ("--color <name>",            "Named palette  (saved for future runs)"),
-        ("--from <hex> --to <hex>",   "Custom gradient (saved for future runs)"),
-        ("--pick,   -p",              "Interactive TUI color picker"),
-        ("--settings, -s",            "Interactive TUI settings page"),
-        ("--custom",                  "Interactive custom palette manager (TUI)"),
-        ("--random, -r",              "Random palette — different every run"),
-        ("--reset",                   "Reset to default (fire), then burn"),
+        ("--color <name>", "Named palette  (saved for future runs)"),
+        (
+            "--from <hex> --to <hex>",
+            "Custom gradient (saved for future runs)",
+        ),
+        ("--pick,   -p", "Interactive TUI color picker"),
+        ("--settings, -s", "Interactive TUI settings page"),
+        ("--custom", "Interactive custom palette manager (TUI)"),
+        ("--random, -r", "Random palette — different every run"),
+        ("--reset", "Reset to default (fire), then burn"),
     ];
     for (flag, desc) in modes {
         println!(
@@ -129,11 +147,11 @@ pub fn print_help() {
     sec("DISCOVERY");
     let list_desc = format!("Palette grid ({n} palettes) with live swatches");
     let disc: &[(&str, &str)] = &[
-        ("--start",                   "Premium onboarding guide & setup"),
-        ("--list-colors, --list",     list_desc.as_str()),
-        ("--info, -i",                "Info card for the currently active palette"),
-        ("--version, -V",             "Version and palette count"),
-        ("--help, -h",                "Show this help"),
+        ("--start", "Premium onboarding guide & setup"),
+        ("--list-colors, --list", list_desc.as_str()),
+        ("--info, -i", "Info card for the currently active palette"),
+        ("--version, -V", "Version and palette count"),
+        ("--help, -h", "Show this help"),
     ];
     for (flag, desc) in disc {
         println!(
@@ -150,17 +168,26 @@ pub fn print_help() {
 
     sec("EXAMPLES");
     let ex: &[(&str, &str)] = &[
-        ("pyroclear --start",                           "interactive guide & onboarding"),
-        ("pyroclear",                                   "burn with saved / default palette"),
-        ("pyroclear --color ocean",                     "burn ocean & save it"),
-        ("pyroclear --settings",                        "configure speed, wind, height decay"),
-        ("pyroclear --custom",                          "manage and run saved custom palettes"),
-        ("pyroclear --random",                          "random palette each run"),
-        ("pyroclear --from \"#002080\" --to \"#00f0ff\"",   "custom gradient"),
-        ("pyroclear --pick",                            "interactive picker"),
-        ("pyroclear --color lava --no-save",            "one-off, no config change"),
-        ("pyroclear --info",                            "show active palette card"),
-        ("pyroclear --list-colors | less -R",           "browse all palettes"),
+        ("pyroclear --start", "interactive guide & onboarding"),
+        ("pyroclear", "burn with saved / default palette"),
+        ("pyroclear --color ocean", "burn ocean & save it"),
+        (
+            "pyroclear --settings",
+            "configure speed, wind, height decay",
+        ),
+        ("pyroclear --custom", "manage and run saved custom palettes"),
+        ("pyroclear --random", "random palette each run"),
+        (
+            "pyroclear --from \"#002080\" --to \"#00f0ff\"",
+            "custom gradient",
+        ),
+        ("pyroclear --pick", "interactive picker"),
+        (
+            "pyroclear --color lava --no-save",
+            "one-off, no config change",
+        ),
+        ("pyroclear --info", "show active palette card"),
+        ("pyroclear --list-colors | less -R", "browse all palettes"),
     ];
     for (cmd, note) in ex {
         println!(
@@ -200,7 +227,9 @@ pub fn print_start() {
     println!("     ANSI RGB commands. No heavy dependencies or TUI frameworks used.");
 
     header("HOW TO USE IT");
-    println!("  {ESC}[1;38;2;255;220;80m• Select Colors{ESC}[0m  Open the interactive color picker via:");
+    println!(
+        "  {ESC}[1;38;2;255;220;80m• Select Colors{ESC}[0m  Open the interactive color picker via:"
+    );
     println!("                 {ESC}[38;2;80;185;255mpyroclear --pick{ESC}[0m (or {ESC}[38;2;80;185;255m-p{ESC}[0m)");
     println!();
     println!("  {ESC}[1;38;2;255;220;80m• Fine-Tune{ESC}[0m     Open the interactive animation settings panel to");
@@ -211,7 +240,9 @@ pub fn print_start() {
     println!("                 {ESC}[38;2;80;185;255mpyroclear --color toxic --no-save{ESC}[0m");
     println!("                 {ESC}[38;2;80;185;255mpyroclear --random{ESC}[0m");
 
-    println!("\n  {ESC}[38;2;90;90;110mFor full flag documentation, run: pyroclear --help{ESC}[0m\n");
+    println!(
+        "\n  {ESC}[38;2;90;90;110mFor full flag documentation, run: pyroclear --help{ESC}[0m\n"
+    );
 }
 
 // ── Color list ────────────────────────────────────────────────────────
@@ -219,17 +250,17 @@ pub fn print_start() {
 pub fn print_color_list() {
     print_banner();
     let (cols, _) = crate::engine::terminal_size();
-    let n      = NAMED_PALETTES.len();
+    let n = NAMED_PALETTES.len();
     let two_col = cols >= 132;
-    let id_w    = 18usize;
-    let sw_w    = if two_col { 20usize } else { 28usize };
+    let id_w = 18usize;
+    let sw_w = if two_col { 20usize } else { 28usize };
 
     let rule = "─".repeat(cols.saturating_sub(26));
     println!("  {ESC}[1;38;2;255;200;80m{n} palettes available{ESC}[0m  {ESC}[38;2;45;45;65m{rule}{ESC}[0m\n");
 
     for &(cat_name, start, end) in CATEGORIES {
         let count = end - start;
-        let rl    = cols.saturating_sub(cat_name.len() + 14);
+        let rl = cols.saturating_sub(cat_name.len() + 14);
         println!(
             "  {ESC}[38;2;255;160;35m▸ {cat_name}{ESC}[0m  \
              {ESC}[38;2;55;55;75m{count:>3} ╌{}{ESC}[0m",

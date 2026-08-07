@@ -1,8 +1,13 @@
 // tui.rs — raw terminal, key input, interactive picker & settings TUI.
 
+use crate::{
+    config::{AnimSettings, PaletteChoice},
+    engine::{terminal_size, Rng},
+    palettes::*,
+    ESC,
+};
 use std::io::{self, Read, Write};
 use std::time::Duration;
-use crate::{ESC, palettes::*, config::{AnimSettings, PaletteChoice}, engine::{terminal_size, Rng}};
 
 // ── Raw terminal guard ────────────────────────────────────────────────
 
@@ -25,7 +30,7 @@ impl TermRawGuard {
             }
             let mut raw = orig;
             raw.c_lflag &= !(libc::ICANON | libc::ECHO | libc::ISIG);
-            raw.c_cc[libc::VMIN]  = 1;
+            raw.c_cc[libc::VMIN] = 1;
             raw.c_cc[libc::VTIME] = 0;
             unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &raw) };
             orig
@@ -44,7 +49,9 @@ impl Drop for TermRawGuard {
         print!("{ESC}[?1049l{ESC}[?25h"); // restore screen and cursor
         io::stdout().flush().ok();
         #[cfg(unix)]
-        unsafe { libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &self.orig) };
+        unsafe {
+            libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &self.orig)
+        };
         #[cfg(windows)]
         crate::win::leave_raw(&self.orig);
     }
@@ -54,8 +61,12 @@ impl Drop for TermRawGuard {
 
 #[derive(Debug, PartialEq)]
 pub enum Key {
-    Up, Down, Left, Right,
-    PageUp, PageDown,
+    Up,
+    Down,
+    Left,
+    Right,
+    PageUp,
+    PageDown,
     Enter,
     Char(char),
     Esc,
@@ -66,7 +77,9 @@ pub enum Key {
 pub fn read_key() -> Key {
     let mut buf = [0u8; 6];
     let n = std::io::stdin().read(&mut buf).unwrap_or(0);
-    if n == 0 { return Key::Other; }
+    if n == 0 {
+        return Key::Other;
+    }
     match &buf[..n as usize] {
         [0x1b, b'[', b'A', ..] => Key::Up,
         [0x1b, b'[', b'B', ..] => Key::Down,
@@ -74,9 +87,9 @@ pub fn read_key() -> Key {
         [0x1b, b'[', b'D', ..] => Key::Left,
         [0x1b, b'[', b'5', b'~', ..] => Key::PageUp,
         [0x1b, b'[', b'6', b'~', ..] => Key::PageDown,
-        [0x1b, ..] if n == 1  => Key::Esc,
-        [0x0d] | [0x0a]       => Key::Enter,
-        [0x7f] | [0x08]       => Key::Backspace,
+        [0x1b, ..] if n == 1 => Key::Esc,
+        [0x0d] | [0x0a] => Key::Enter,
+        [0x7f] | [0x08] => Key::Backspace,
         [c] if *c >= 0x20 && *c < 0x7f => Key::Char(*c as char),
         _ => Key::Other,
     }
@@ -92,8 +105,12 @@ pub fn prompt_hex(label: &str, row: u16) -> Option<String> {
         match read_key() {
             Key::Enter => {
                 let s = input.trim().to_string();
-                if s.is_empty() { return None; }
-                if hex_to_rgb(&s).is_some() { return Some(s); }
+                if s.is_empty() {
+                    return None;
+                }
+                if hex_to_rgb(&s).is_some() {
+                    return Some(s);
+                }
                 print!(
                     "{ESC}[{row};1H{ESC}[2K\
                      {ESC}[38;2;255;70;70m  ✗ invalid hex — need #rrggbb{ESC}[0m"
@@ -102,10 +119,16 @@ pub fn prompt_hex(label: &str, row: u16) -> Option<String> {
                 std::thread::sleep(Duration::from_millis(800));
                 input.clear();
             }
-            Key::Backspace => { input.pop(); }
-            Key::Char(c)   => { if input.len() < 7 { input.push(c); } }
-            Key::Esc       => return None,
-            _              => {}
+            Key::Backspace => {
+                input.pop();
+            }
+            Key::Char(c) => {
+                if input.len() < 7 {
+                    input.push(c);
+                }
+            }
+            Key::Esc => return None,
+            _ => {}
         }
     }
 }
@@ -114,10 +137,14 @@ pub fn prompt_hex(label: &str, row: u16) -> Option<String> {
 
 /// Truncate to at most `max_chars` display characters (Unicode-safe).
 fn truncate_display(s: &str, max_chars: usize) -> &str {
-    if max_chars == 0 { return ""; }
+    if max_chars == 0 {
+        return "";
+    }
     let mut n = 0usize;
     for (byte_idx, _) in s.char_indices() {
-        if n >= max_chars { return &s[..byte_idx]; }
+        if n >= max_chars {
+            return &s[..byte_idx];
+        }
         n += 1;
     }
     s
@@ -145,7 +172,9 @@ fn apply_filter(search: &str) -> Vec<usize> {
         })
         .map(|(i, _)| i)
         .collect();
-    if "custom".contains(s.as_str()) { v.push(NAMED_PALETTES.len()); }
+    if "custom".contains(s.as_str()) {
+        v.push(NAMED_PALETTES.len());
+    }
     v
 }
 
@@ -163,7 +192,7 @@ fn draw_picker(
     // Row 1: title bar
     print!("{ESC}[1;1H");
     let title = " pyroclear  ◆  color picker ";
-    let gap   = cols.saturating_sub(title.len());
+    let gap = cols.saturating_sub(title.len());
     print!(
         "{ESC}[48;2;20;20;36m{ESC}[38;2;255;200;80m{title}\
          {ESC}[38;2;50;50;72m{}{ESC}[0m",
@@ -181,7 +210,11 @@ fn draw_picker(
         );
     } else {
         let caret = if search_active { "_" } else { "" };
-        let col   = if search_active { "255;220;80" } else { "150;150;180" };
+        let col = if search_active {
+            "255;220;80"
+        } else {
+            "150;150;180"
+        };
         print!(
             "  {ESC}[38;2;{col}m/{search}{caret}{ESC}[0m  \
              {ESC}[38;2;95;95;115m{match_count} match{}{ESC}[0m",
@@ -191,21 +224,29 @@ fn draw_picker(
 
     // Palette list
     let list_start = 2usize;
-    let list_end   = rows.saturating_sub(4);
-    let visible    = list_end.saturating_sub(list_start);
-    let offset     = if selected >= visible { selected - visible + 1 } else { 0 };
+    let list_end = rows.saturating_sub(4);
+    let visible = list_end.saturating_sub(list_start);
+    let offset = if selected >= visible {
+        selected - visible + 1
+    } else {
+        0
+    };
 
     for slot in 0..visible {
         let fi_pos = slot + offset;
-        let row    = (list_start + slot + 1) as u16;
+        let row = (list_start + slot + 1) as u16;
         print!("{ESC}[{row};1H{ESC}[2K");
-        if fi_pos >= filter.len() { continue; }
+        if fi_pos >= filter.len() {
+            continue;
+        }
 
-        let fi     = filter[fi_pos];
+        let fi = filter[fi_pos];
         let is_sel = fi_pos == selected;
         let cursor = if is_sel { "▸" } else { " " };
 
-        if is_sel { print!("{ESC}[48;2;20;26;46m"); }
+        if is_sel {
+            print!("{ESC}[48;2;20;26;46m");
+        }
 
         let (name_str, desc_str, sw_str, fhex, thex) = if fi < NAMED_PALETTES.len() {
             let (id, display, desc, fh, th) = NAMED_PALETTES[fi];
@@ -213,13 +254,22 @@ fn draw_picker(
                 soften(&FIRE_PALETTE, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
             } else {
                 let from = hex_to_rgb(fh).unwrap_or((0, 0, 0));
-                let to   = hex_to_rgb(th).unwrap_or((255, 255, 255));
-                soften(&generate_palette(from, to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
+                let to = hex_to_rgb(th).unwrap_or((255, 255, 255));
+                soften(
+                    &generate_palette(from, to),
+                    SOFTEN_DESATURATE,
+                    SOFTEN_BRIGHTEN,
+                )
             };
             (display, desc, palette_swatch(&p, sw_w), fh, th)
         } else {
-            ("Custom", "enter your own #rrggbb gradient",
-             swatch((50, 0, 60), (255, 180, 80), sw_w), "", "")
+            (
+                "Custom",
+                "enter your own #rrggbb gradient",
+                swatch((50, 0, 60), (255, 180, 80), sw_w),
+                "",
+                "",
+            )
         };
 
         if is_sel {
@@ -241,8 +291,8 @@ fn draw_picker(
         let used_approx = 4 + 18 + 2 + sw_w + 2 + 17;
         if cols > used_approx + 6 {
             let max_d = cols.saturating_sub(used_approx + 4);
-            let td    = truncate_display(desc_str, max_d);
-            let dc    = if is_sel { "140;140;172" } else { "62;62;82" };
+            let td = truncate_display(desc_str, max_d);
+            let dc = if is_sel { "140;140;172" } else { "62;62;82" };
             print!("  {ESC}[38;2;{dc}m{td}{ESC}[0m");
         }
 
@@ -267,8 +317,12 @@ fn draw_picker(
                 soften(&FIRE_PALETTE, SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
             } else {
                 let from = hex_to_rgb(fh).unwrap_or((0, 0, 0));
-                let to   = hex_to_rgb(th).unwrap_or((255, 255, 255));
-                soften(&generate_palette(from, to), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN)
+                let to = hex_to_rgb(th).unwrap_or((255, 255, 255));
+                soften(
+                    &generate_palette(from, to),
+                    SOFTEN_DESATURATE,
+                    SOFTEN_BRIGHTEN,
+                )
             };
             let pw = cols.saturating_sub(22).min(72);
             let ps = palette_swatch(&p, pw);
@@ -302,11 +356,11 @@ fn draw_picker(
 pub fn interactive_pick() -> Option<PaletteChoice> {
     let _guard = TermRawGuard::enter().ok()?;
 
-    let mut selected      = 0usize;
-    let mut search        = String::new();
+    let mut selected = 0usize;
+    let mut search = String::new();
     let mut search_active = false;
-    let mut filter        = apply_filter("");
-    let page_size         = 10usize;
+    let mut filter = apply_filter("");
+    let page_size = 10usize;
 
     loop {
         let size = terminal_size();
@@ -316,32 +370,44 @@ pub fn interactive_pick() -> Option<PaletteChoice> {
 
         if search_active {
             match key {
-                Key::Esc | Key::Enter => { search_active = false; }
+                Key::Esc | Key::Enter => {
+                    search_active = false;
+                }
                 Key::Backspace => {
                     search.pop();
-                    filter   = apply_filter(&search);
+                    filter = apply_filter(&search);
                     selected = 0;
                 }
                 Key::Char(c) => {
                     search.push(c);
-                    filter   = apply_filter(&search);
+                    filter = apply_filter(&search);
                     selected = 0;
                 }
                 _ => {}
             }
         } else {
             match key {
-                Key::Up   => { if selected > 0 { selected -= 1; } }
-                Key::Down => {
-                    if !filter.is_empty() && selected + 1 < filter.len() { selected += 1; }
+                Key::Up => {
+                    if selected > 0 {
+                        selected -= 1;
+                    }
                 }
-                Key::PageUp   => { selected = selected.saturating_sub(page_size); }
+                Key::Down => {
+                    if !filter.is_empty() && selected + 1 < filter.len() {
+                        selected += 1;
+                    }
+                }
+                Key::PageUp => {
+                    selected = selected.saturating_sub(page_size);
+                }
                 Key::PageDown => {
                     if !filter.is_empty() {
                         selected = (selected + page_size).min(filter.len() - 1);
                     }
                 }
-                Key::Char('/') => { search_active = true; }
+                Key::Char('/') => {
+                    search_active = true;
+                }
                 Key::Char('r') | Key::Char('R') => {
                     if !filter.is_empty() {
                         let mut rng = Rng::new();
@@ -363,9 +429,9 @@ pub fn interactive_pick() -> Option<PaletteChoice> {
                             );
                             io::stdout().flush().ok();
                             let from_str = prompt_hex("  From:", base + 2)?;
-                            let to_str   = prompt_hex("  To:  ", base + 3)?;
+                            let to_str = prompt_hex("  To:  ", base + 3)?;
                             let from = hex_to_rgb(&from_str)?;
-                            let to   = hex_to_rgb(&to_str)?;
+                            let to = hex_to_rgb(&to_str)?;
                             return Some(PaletteChoice::Custom { from, to });
                         }
                     }
@@ -373,7 +439,7 @@ pub fn interactive_pick() -> Option<PaletteChoice> {
                 Key::Esc => {
                     if !search.is_empty() {
                         search.clear();
-                        filter   = apply_filter("");
+                        filter = apply_filter("");
                         selected = 0;
                     } else {
                         return None;
@@ -392,7 +458,7 @@ fn draw_settings(selected: usize, settings: &AnimSettings, (cols, rows): (usize,
     // Title bar
     print!("{ESC}[1;1H");
     let title = " pyroclear  ◆  animation settings ";
-    let gap   = cols.saturating_sub(title.len());
+    let gap = cols.saturating_sub(title.len());
     print!(
         "{ESC}[48;2;20;20;36m{ESC}[38;2;255;200;80m{title}\
          {ESC}[38;2;50;50;72m{}{ESC}[0m",
@@ -400,41 +466,53 @@ fn draw_settings(selected: usize, settings: &AnimSettings, (cols, rows): (usize,
     );
 
     let items = [
-        ("FPS / Speed    ", match settings.fps {
-            15  => "15 fps  (extremely slow / cinematic)",
-            30  => "30 fps  (standard retro feel)",
-            45  => "45 fps  (smooth legacy animation)",
-            60  => "60 fps  (default smooth 60fps)",
-            75  => "75 fps  (high refresh rate)",
-            90  => "90 fps  (ultra high refresh rate)",
-            120 => "120 fps (blazing fast execution)",
-            _   => "custom fps",
-        }),
-        ("Wind / Breeze  ", match settings.wind {
-            -2 => "Strong Left   (blowing hard left)",
-            -1 => "Gentle Left   (gently drifting left)",
-             0 => "None          (rising straight up)",
-             1 => "Gentle Right  (gently drifting right)",
-             2 => "Strong Right  (blowing hard right)",
-             _ => "unknown wind",
-        }),
-        ("Flame Height   ", match settings.height {
-            0 => "Low           (fast decay, small fire)",
-            1 => "Medium        (default height decay)",
-            2 => "High          (slow decay, tall flames)",
-            3 => "Extreme       (minimum decay, full screen)",
-            _ => "unknown height",
-        }),
-        ("Fire Direction ", if settings.direction {
-            "Top → Bottom  (falling fire effect)"
-        } else {
-            "Bottom → Top  (classic rising flames)"
-        }),
+        (
+            "FPS / Speed    ",
+            match settings.fps {
+                15 => "15 fps  (extremely slow / cinematic)",
+                30 => "30 fps  (standard retro feel)",
+                45 => "45 fps  (smooth legacy animation)",
+                60 => "60 fps  (default smooth 60fps)",
+                75 => "75 fps  (high refresh rate)",
+                90 => "90 fps  (ultra high refresh rate)",
+                120 => "120 fps (blazing fast execution)",
+                _ => "custom fps",
+            },
+        ),
+        (
+            "Wind / Breeze  ",
+            match settings.wind {
+                -2 => "Strong Left   (blowing hard left)",
+                -1 => "Gentle Left   (gently drifting left)",
+                0 => "None          (rising straight up)",
+                1 => "Gentle Right  (gently drifting right)",
+                2 => "Strong Right  (blowing hard right)",
+                _ => "unknown wind",
+            },
+        ),
+        (
+            "Flame Height   ",
+            match settings.height {
+                0 => "Low           (fast decay, small fire)",
+                1 => "Medium        (default height decay)",
+                2 => "High          (slow decay, tall flames)",
+                3 => "Extreme       (minimum decay, full screen)",
+                _ => "unknown height",
+            },
+        ),
+        (
+            "Fire Direction ",
+            if settings.direction {
+                "Top → Bottom  (falling fire effect)"
+            } else {
+                "Bottom → Top  (classic rising flames)"
+            },
+        ),
     ];
 
     let start_row = 3u16;
     for (idx, (label, value)) in items.iter().enumerate() {
-        let row    = start_row + idx as u16 * 2;
+        let row = start_row + idx as u16 * 2;
         let is_sel = idx == selected;
         let cursor = if is_sel { "▸" } else { " " };
 
@@ -444,7 +522,9 @@ fn draw_settings(selected: usize, settings: &AnimSettings, (cols, rows): (usize,
             print!("  {cursor} {ESC}[1;38;2;255;230;100m{label}{ESC}[0m");
             print!("{ESC}[48;2;20;26;46m   ◀  {ESC}[1;38;2;255;255;255m{value:<44}{ESC}[0m◀   ");
             let taken = 4 + 1 + label.len() + 6 + 44 + 4;
-            if cols > taken { print!("{}", " ".repeat(cols - taken)); }
+            if cols > taken {
+                print!("{}", " ".repeat(cols - taken));
+            }
             print!("{ESC}[0m");
         } else {
             print!("    {label}      {ESC}[38;2;178;178;205m{value}{ESC}[0m");
@@ -478,63 +558,83 @@ pub fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
     let _guard = TermRawGuard::enter().ok()?;
     let mut settings = current.clone();
     let mut selected = 0usize;
-    let fps_options  = [15, 30, 45, 60, 75, 90, 120];
+    let fps_options = [15, 30, 45, 60, 75, 90, 120];
 
     loop {
         let size = terminal_size();
         draw_settings(selected, &settings, size);
 
         match read_key() {
-            Key::Up   => { if selected > 0 { selected -= 1; } }
-            Key::Down => { if selected < 3 { selected += 1; } }
-            Key::Left => {
-                match selected {
-                    0 => {
-                        if let Some(idx) = fps_options.iter().position(|&x| x == settings.fps) {
-                            settings.fps = if idx > 0 {
-                                fps_options[idx - 1]
-                            } else {
-                                fps_options[fps_options.len() - 1]
-                            };
-                        }
-                    }
-                    1 => {
-                        settings.wind = if settings.wind > -2 { settings.wind - 1 } else { 2 };
-                    }
-                    2 => {
-                        settings.height = if settings.height > 0 { settings.height - 1 } else { 3 };
-                    }
-                    3 => {
-                        settings.direction = !settings.direction;
-                    }
-                    _ => {}
+            Key::Up => {
+                if selected > 0 {
+                    selected -= 1;
                 }
             }
-            Key::Right => {
-                match selected {
-                    0 => {
-                        if let Some(idx) = fps_options.iter().position(|&x| x == settings.fps) {
-                            settings.fps = if idx + 1 < fps_options.len() {
-                                fps_options[idx + 1]
-                            } else {
-                                fps_options[0]
-                            };
-                        }
-                    }
-                    1 => {
-                        settings.wind = if settings.wind < 2 { settings.wind + 1 } else { -2 };
-                    }
-                    2 => {
-                        settings.height = if settings.height < 3 { settings.height + 1 } else { 0 };
-                    }
-                    3 => {
-                        settings.direction = !settings.direction;
-                    }
-                    _ => {}
+            Key::Down => {
+                if selected < 3 {
+                    selected += 1;
                 }
             }
+            Key::Left => match selected {
+                0 => {
+                    if let Some(idx) = fps_options.iter().position(|&x| x == settings.fps) {
+                        settings.fps = if idx > 0 {
+                            fps_options[idx - 1]
+                        } else {
+                            fps_options[fps_options.len() - 1]
+                        };
+                    }
+                }
+                1 => {
+                    settings.wind = if settings.wind > -2 {
+                        settings.wind - 1
+                    } else {
+                        2
+                    };
+                }
+                2 => {
+                    settings.height = if settings.height > 0 {
+                        settings.height - 1
+                    } else {
+                        3
+                    };
+                }
+                3 => {
+                    settings.direction = !settings.direction;
+                }
+                _ => {}
+            },
+            Key::Right => match selected {
+                0 => {
+                    if let Some(idx) = fps_options.iter().position(|&x| x == settings.fps) {
+                        settings.fps = if idx + 1 < fps_options.len() {
+                            fps_options[idx + 1]
+                        } else {
+                            fps_options[0]
+                        };
+                    }
+                }
+                1 => {
+                    settings.wind = if settings.wind < 2 {
+                        settings.wind + 1
+                    } else {
+                        -2
+                    };
+                }
+                2 => {
+                    settings.height = if settings.height < 3 {
+                        settings.height + 1
+                    } else {
+                        0
+                    };
+                }
+                3 => {
+                    settings.direction = !settings.direction;
+                }
+                _ => {}
+            },
             Key::Enter | Key::Char('s') => return Some(settings),
-            Key::Esc   | Key::Char('q') => return None,
+            Key::Esc | Key::Char('q') => return None,
             _ => {}
         }
     }
@@ -550,12 +650,20 @@ pub fn prompt_string(label: &str, row: u16) -> Option<String> {
         match read_key() {
             Key::Enter => {
                 let s = input.trim().to_string();
-                if !s.is_empty() { return Some(s); }
+                if !s.is_empty() {
+                    return Some(s);
+                }
             }
-            Key::Backspace => { input.pop(); }
-            Key::Char(c)   => { if input.len() < 30 { input.push(c); } }
-            Key::Esc       => return None,
-            _              => {}
+            Key::Backspace => {
+                input.pop();
+            }
+            Key::Char(c) => {
+                if input.len() < 30 {
+                    input.push(c);
+                }
+            }
+            Key::Esc => return None,
+            _ => {}
         }
     }
 }
@@ -569,13 +677,13 @@ pub fn interactive_custom() -> Option<PaletteChoice> {
     loop {
         let size = terminal_size();
         let (cols, rows) = size;
-        
+
         let mut entries = crate::config::load_custom_palettes();
 
         // Draw header
         print!("{ESC}[1;1H");
         let title = " pyroclear  ◆  custom palettes ";
-        let gap   = cols.saturating_sub(title.len());
+        let gap = cols.saturating_sub(title.len());
         print!(
             "{ESC}[48;2;20;20;36m{ESC}[38;2;255;200;80m{title}\
              {ESC}[38;2;50;50;72m{}{ESC}[0m",
@@ -584,14 +692,18 @@ pub fn interactive_custom() -> Option<PaletteChoice> {
 
         // Draw list
         let list_start = 2usize;
-        let list_end   = rows.saturating_sub(4);
-        let visible    = list_end.saturating_sub(list_start);
-        
+        let list_end = rows.saturating_sub(4);
+        let visible = list_end.saturating_sub(list_start);
+
         if selected >= entries.len() && !entries.is_empty() {
             selected = entries.len() - 1;
         }
 
-        let offset = if selected >= visible { selected - visible + 1 } else { 0 };
+        let offset = if selected >= visible {
+            selected - visible + 1
+        } else {
+            0
+        };
 
         for slot in 0..visible {
             let row = (list_start + slot + 1) as u16;
@@ -605,11 +717,17 @@ pub fn interactive_custom() -> Option<PaletteChoice> {
             let is_sel = idx == selected;
             let cursor = if is_sel { "▸" } else { " " };
 
-            if is_sel { print!("{ESC}[48;2;20;26;46m"); }
+            if is_sel {
+                print!("{ESC}[48;2;20;26;46m");
+            }
 
-            let from_rgb = hex_to_rgb(&entry.from).unwrap_or((0,0,0));
-            let to_rgb = hex_to_rgb(&entry.to).unwrap_or((255,255,255));
-            let p = soften(&generate_palette(from_rgb, to_rgb), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN);
+            let from_rgb = hex_to_rgb(&entry.from).unwrap_or((0, 0, 0));
+            let to_rgb = hex_to_rgb(&entry.to).unwrap_or((255, 255, 255));
+            let p = soften(
+                &generate_palette(from_rgb, to_rgb),
+                SOFTEN_DESATURATE,
+                SOFTEN_BRIGHTEN,
+            );
             let sw_w = (cols.saturating_sub(55)).clamp(10, 30);
             let sw_str = palette_swatch(&p, sw_w);
 
@@ -619,7 +737,10 @@ pub fn interactive_custom() -> Option<PaletteChoice> {
                 print!("{ESC}[38;2;178;178;205m");
             }
 
-            print!("  {cursor} {:<15} ({:<10})  {sw_str}  ", entry.display, entry.name);
+            print!(
+                "  {cursor} {:<15} ({:<10})  {sw_str}  ",
+                entry.display, entry.name
+            );
             print!(
                 "{ESC}[38;2;82;82;108m{}\
                  {ESC}[38;2;48;48;68m→\
@@ -647,12 +768,19 @@ pub fn interactive_custom() -> Option<PaletteChoice> {
         print!("{ESC}[{prev_row};1H{ESC}[2K");
         if !entries.is_empty() && selected < entries.len() {
             let entry = &entries[selected];
-            let from_rgb = hex_to_rgb(&entry.from).unwrap_or((0,0,0));
-            let to_rgb = hex_to_rgb(&entry.to).unwrap_or((255,255,255));
-            let p = soften(&generate_palette(from_rgb, to_rgb), SOFTEN_DESATURATE, SOFTEN_BRIGHTEN);
+            let from_rgb = hex_to_rgb(&entry.from).unwrap_or((0, 0, 0));
+            let to_rgb = hex_to_rgb(&entry.to).unwrap_or((255, 255, 255));
+            let p = soften(
+                &generate_palette(from_rgb, to_rgb),
+                SOFTEN_DESATURATE,
+                SOFTEN_BRIGHTEN,
+            );
             let pw = cols.saturating_sub(22).min(72);
             let ps = palette_swatch(&p, pw);
-            print!("  {ESC}[38;2;92;92;115m▸ {ESC}[38;2;172;172;198m{:<16}{ESC}[0m  {ps}", entry.display);
+            print!(
+                "  {ESC}[38;2;92;92;115m▸ {ESC}[38;2;172;172;198m{:<16}{ESC}[0m  {ps}",
+                entry.display
+            );
         }
 
         // Key hints
@@ -671,10 +799,14 @@ pub fn interactive_custom() -> Option<PaletteChoice> {
 
         match read_key() {
             Key::Up => {
-                if selected > 0 { selected -= 1; }
+                if selected > 0 {
+                    selected -= 1;
+                }
             }
             Key::Down => {
-                if !entries.is_empty() && selected + 1 < entries.len() { selected += 1; }
+                if !entries.is_empty() && selected + 1 < entries.len() {
+                    selected += 1;
+                }
             }
             Key::Char('n') | Key::Char('N') => {
                 let base = rows as u16 - 4;
@@ -684,7 +816,7 @@ pub fn interactive_custom() -> Option<PaletteChoice> {
                      {ESC}[38;2;175;175;200m  Create new custom palette{ESC}[0m\n"
                 );
                 io::stdout().flush().ok();
-                
+
                 if let Some(name) = prompt_string("  Slug (id):", base + 1) {
                     let slug = name.to_lowercase().replace(" ", "-");
                     if let Some(display) = prompt_string("  Name:     ", base + 2) {
