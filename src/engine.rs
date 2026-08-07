@@ -1,18 +1,18 @@
 // engine.rs — PRNG, terminal I/O, fire simulation loop.
 
+use crate::{config::AnimSettings, palettes::Palette, ESC};
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use crate::{ESC, palettes::Palette, config::AnimSettings};
 
 // ── Simulation constants ──────────────────────────────────────────────
 
-const MAX_HEAT: u8         = 36;
+const MAX_HEAT: u8 = 36;
 const STEPS_PER_FRAME: u32 = 2;
 const MAX_DURATION: Duration = Duration::from_millis(2200);
 const SOURCE_COOL_START: f32 = 0.38;
-const DIE_OUT_THRESHOLD: u8  = 2;
+const DIE_OUT_THRESHOLD: u8 = 2;
 
 // ── PRNG (xorshift64*) ────────────────────────────────────────────────
 
@@ -23,7 +23,8 @@ impl Rng {
         let seed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .subsec_nanos() as u64 | 1;
+            .subsec_nanos() as u64
+            | 1;
         Rng(seed)
     }
 
@@ -78,7 +79,7 @@ fn render(buf: &mut String, grid: &[u8], cols: usize, rows: usize, palette: &Pal
     let mut last: Option<CellColor> = None;
     for y in 0..rows {
         for x in 0..cols {
-            let heat  = grid[y * cols + x];
+            let heat = grid[y * cols + x];
             let color = if heat == 0 {
                 CellColor::Default
             } else {
@@ -88,7 +89,7 @@ fn render(buf: &mut String, grid: &[u8], cols: usize, rows: usize, palette: &Pal
 
             if last != Some(color) {
                 match color {
-                    CellColor::Default      => buf.push_str(&format!("{ESC}[49m")),
+                    CellColor::Default => buf.push_str(&format!("{ESC}[49m")),
                     CellColor::Rgb(r, g, b) => buf.push_str(&format!("{ESC}[48;2;{r};{g};{b}m")),
                 }
                 last = Some(color);
@@ -113,24 +114,28 @@ fn resize_grid(cols: usize, rows: usize, top_down: bool) -> Vec<u8> {
 pub fn burn(palette: &Palette, settings: &AnimSettings, interrupted: Arc<AtomicBool>) {
     let (mut cols, mut rows) = terminal_size();
     let mut grid = resize_grid(cols, rows, settings.direction);
-    let mut rng  = Rng::new();
+    let mut rng = Rng::new();
 
     let stdout = io::stdout();
     let mut out = stdout.lock();
     // Hide cursor + full clear (screen + scrollback) so no residual content
     let _ = write!(out, "{ESC}[?25l{ESC}[0m{ESC}[H{ESC}[2J{ESC}[3J");
 
-    let start          = Instant::now();
+    let start = Instant::now();
     let source_cool_at = MAX_DURATION.mul_f32(SOURCE_COOL_START);
-    let mut frame      = String::with_capacity(cols * rows * 8);
-    let frame_delay    = Duration::from_millis(1000 / settings.fps as u64);
-    let top_down       = settings.direction;
+    let mut frame = String::with_capacity(cols * rows * 8);
+    let frame_delay = Duration::from_millis(1000 / settings.fps.max(1) as u64);
+    let top_down = settings.direction;
 
     loop {
-        if interrupted.load(Ordering::Relaxed) { break; }
+        if interrupted.load(Ordering::Relaxed) {
+            break;
+        }
 
         let elapsed = start.elapsed();
-        if elapsed > MAX_DURATION { break; }
+        if elapsed > MAX_DURATION {
+            break;
+        }
 
         // Live resize
         let (new_cols, new_rows) = terminal_size();
@@ -168,13 +173,13 @@ pub fn burn(palette: &Palette, settings: &AnimSettings, interrupted: Arc<AtomicB
                         let drift = match settings.wind {
                             -2 => rng.range(-2, 0), // Strong Left
                             -1 => rng.range(-1, 0), // Gentle Left
-                             0 => rng.range(-1, 1), // None
-                             1 => rng.range(0,  1), // Gentle Right
-                             2 => rng.range(0,  2), // Strong Right
-                             _ => rng.range(-1, 1),
+                            0 => rng.range(-1, 1),  // None
+                            1 => rng.range(0, 1),   // Gentle Right
+                            2 => rng.range(0, 2),   // Strong Right
+                            _ => rng.range(-1, 1),
                         };
 
-                        let nx      = (x as i32 + drift).clamp(0, cols as i32 - 1) as usize;
+                        let nx = (x as i32 + drift).clamp(0, cols as i32 - 1) as usize;
                         let new_val = (above as i32 - decay).max(0) as u8;
                         grid[(y + 1) * cols + nx] = new_val;
                     }
@@ -204,13 +209,13 @@ pub fn burn(palette: &Palette, settings: &AnimSettings, interrupted: Arc<AtomicB
                         let drift = match settings.wind {
                             -2 => rng.range(-2, 0), // Strong Left
                             -1 => rng.range(-1, 0), // Gentle Left
-                             0 => rng.range(-1, 1), // None
-                             1 => rng.range(0,  1), // Gentle Right
-                             2 => rng.range(0,  2), // Strong Right
-                             _ => rng.range(-1, 1),
+                            0 => rng.range(-1, 1),  // None
+                            1 => rng.range(0, 1),   // Gentle Right
+                            2 => rng.range(0, 2),   // Strong Right
+                            _ => rng.range(-1, 1),
                         };
 
-                        let nx      = (x as i32 + drift).clamp(0, cols as i32 - 1) as usize;
+                        let nx = (x as i32 + drift).clamp(0, cols as i32 - 1) as usize;
                         let new_val = (below as i32 - decay).max(0) as u8;
                         grid[(y - 1) * cols + nx] = new_val;
                     }
@@ -232,7 +237,9 @@ pub fn burn(palette: &Palette, settings: &AnimSettings, interrupted: Arc<AtomicB
 
         if elapsed > source_cool_at {
             let peak = grid.iter().copied().max().unwrap_or(0);
-            if peak < DIE_OUT_THRESHOLD { break; }
+            if peak < DIE_OUT_THRESHOLD {
+                break;
+            }
         }
 
         std::thread::sleep(frame_delay);

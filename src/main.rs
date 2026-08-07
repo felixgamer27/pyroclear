@@ -27,10 +27,10 @@ use std::time::Duration;
 
 pub const ESC: &str = "\x1b";
 
-pub mod palettes;
 pub mod config;
 pub mod display;
 pub mod engine;
+pub mod palettes;
 pub mod tui;
 #[cfg(windows)]
 pub mod win;
@@ -54,12 +54,15 @@ unsafe extern "system" fn ctrl_handler(_: u32) -> i32 {
 }
 
 fn install_sigint() -> Arc<AtomicBool> {
-    let flag  = Arc::new(AtomicBool::new(false));
+    let flag = Arc::new(AtomicBool::new(false));
     let flag2 = Arc::clone(&flag);
 
     #[cfg(unix)]
     unsafe {
-        libc::signal(libc::SIGINT, sigint_handler as *const () as libc::sighandler_t);
+        libc::signal(
+            libc::SIGINT,
+            sigint_handler as *const () as libc::sighandler_t,
+        );
     }
     #[cfg(windows)]
     unsafe {
