@@ -88,8 +88,9 @@ fn main() {
     burn(&palette, &settings, interrupted);
 
     // Final clear — always runs, even after SIGINT (cursor was restored in burn)
+    // Full clear: reset attrs, home, erase screen + scrollback
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    let _ = write!(out, "{ESC}[H{ESC}[2J");
+    let _ = write!(out, "{ESC}[0m{ESC}[H{ESC}[2J{ESC}[3J");
     let _ = out.flush();
 }
