@@ -371,7 +371,7 @@ fn parse_args() -> (Option<PaletteChoice>, bool) {
             }
             "--reset" => {
                 let c = PaletteChoice::Named("fire".to_string());
-                let (_, default_settings) = load_config();
+                let default_settings = AnimSettings::default();
                 save_config(&c, &default_settings);
                 eprintln!(
                     "  {ESC}[38;2;255;200;80m◆ Reset:{ESC}[0m \
