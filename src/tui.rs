@@ -140,12 +140,10 @@ fn truncate_display(s: &str, max_chars: usize) -> &str {
     if max_chars == 0 {
         return "";
     }
-    let mut n = 0usize;
-    for (byte_idx, _) in s.char_indices() {
+    for (n, (byte_idx, _)) in s.char_indices().enumerate() {
         if n >= max_chars {
             return &s[..byte_idx];
         }
-        n += 1;
     }
     s
 }
@@ -388,9 +386,7 @@ pub fn interactive_pick() -> Option<PaletteChoice> {
         } else {
             match key {
                 Key::Up => {
-                    if selected > 0 {
-                        selected -= 1;
-                    }
+                    selected = selected.saturating_sub(1);
                 }
                 Key::Down => {
                     if !filter.is_empty() && selected + 1 < filter.len() {
@@ -423,9 +419,9 @@ pub fn interactive_pick() -> Option<PaletteChoice> {
                             let (_, rows) = terminal_size();
                             let base = rows as u16 - 4;
                             print!("{ESC}[{base};1H{ESC}[J");
-                            print!(
+                            println!(
                                 "{ESC}[{base};1H\
-                                 {ESC}[38;2;175;175;200m  Enter hex colors (e.g. #ff0000){ESC}[0m\n"
+                                 {ESC}[38;2;175;175;200m  Enter hex colors (e.g. #ff0000){ESC}[0m"
                             );
                             io::stdout().flush().ok();
                             let from_str = prompt_hex("  From:", base + 2)?;
@@ -566,9 +562,7 @@ pub fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
 
         match read_key() {
             Key::Up => {
-                if selected > 0 {
-                    selected -= 1;
-                }
+                selected = selected.saturating_sub(1);
             }
             Key::Down => {
                 if selected < 3 {
@@ -798,9 +792,7 @@ pub fn interactive_custom() -> Option<PaletteChoice> {
 
         match read_key() {
             Key::Up => {
-                if selected > 0 {
-                    selected -= 1;
-                }
+                selected = selected.saturating_sub(1);
             }
             Key::Down => {
                 if !entries.is_empty() && selected + 1 < entries.len() {
@@ -810,9 +802,9 @@ pub fn interactive_custom() -> Option<PaletteChoice> {
             Key::Char('n') | Key::Char('N') => {
                 let base = rows as u16 - 4;
                 print!("{ESC}[{base};1H{ESC}[J");
-                print!(
+                println!(
                     "{ESC}[{base};1H\
-                     {ESC}[38;2;175;175;200m  Create new custom palette{ESC}[0m\n"
+                     {ESC}[38;2;175;175;200m  Create new custom palette{ESC}[0m"
                 );
                 io::stdout().flush().ok();
 

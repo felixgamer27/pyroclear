@@ -18,6 +18,12 @@ const DIE_OUT_THRESHOLD: u8 = 2;
 
 pub struct Rng(u64);
 
+impl Default for Rng {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Rng {
     pub fn new() -> Self {
         let d = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
