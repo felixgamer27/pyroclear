@@ -123,7 +123,7 @@ pub fn prompt_hex(label: &str, row: u16) -> Option<String> {
                 input.pop();
             }
             Key::Char(c) => {
-                if input.len() < 7 {
+                if input.len() < 8 {
                     input.push(c);
                 }
             }
