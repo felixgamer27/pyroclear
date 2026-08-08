@@ -673,12 +673,11 @@ pub fn prompt_string(label: &str, row: u16) -> Option<String> {
 pub fn interactive_custom() -> Option<PaletteChoice> {
     let _guard = TermRawGuard::enter().ok()?;
     let mut selected = 0usize;
+    let mut entries = crate::config::load_custom_palettes();
 
     loop {
         let size = terminal_size();
         let (cols, rows) = size;
-
-        let mut entries = crate::config::load_custom_palettes();
 
         // Draw header
         print!("{ESC}[1;1H");
