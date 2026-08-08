@@ -40,6 +40,9 @@ pub enum PaletteChoice {
 // ── Custom palette storage path ──────────────────────────────────────
 
 pub fn config_dir() -> Option<PathBuf> {
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        return Some(PathBuf::from(xdg).join("pyroclear"));
+    }
     let home = std::env::var("HOME").ok()?;
     Some(PathBuf::from(home).join(".config/pyroclear"))
 }
