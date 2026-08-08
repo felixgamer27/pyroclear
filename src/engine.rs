@@ -20,11 +20,8 @@ pub struct Rng(u64);
 
 impl Rng {
     pub fn new() -> Self {
-        let seed = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .subsec_nanos() as u64
-            | 1;
+        let d = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        let seed = (d.as_secs().wrapping_mul(6364136223846793005) ^ d.subsec_nanos() as u64) | 1;
         Rng(seed)
     }
 
