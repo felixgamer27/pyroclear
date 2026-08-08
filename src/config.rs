@@ -182,13 +182,15 @@ pub fn load_custom_palettes() -> Vec<CustomPaletteEntry> {
                  from: &mut String,
                  to: &mut String| {
         if !name.is_empty() && !from.is_empty() && !to.is_empty() {
+            let name_val = std::mem::take(name);
+            let display_val = if display.is_empty() {
+                name_val.clone()
+            } else {
+                std::mem::take(display)
+            };
             entries.push(CustomPaletteEntry {
-                name: std::mem::take(name),
-                display: if display.is_empty() {
-                    name.clone()
-                } else {
-                    std::mem::take(display)
-                },
+                name: name_val,
+                display: display_val,
                 from: std::mem::take(from),
                 to: std::mem::take(to),
             });
