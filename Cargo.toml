@@ -1,6 +1,6 @@
 [package]
 name = "pyroclear"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 description = "Watch your terminal go up in flames! A fire animation for clearing your terminal."
 license = "MIT"
