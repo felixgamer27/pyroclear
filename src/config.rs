@@ -317,8 +317,8 @@ pub fn build_palette(choice: &PaletteChoice) -> Palette {
 
 // ── CLI argument parsing ──────────────────────────────────────────────
 
-/// Parse CLI flags. Returns (parsed palette choice, run_settings flag).
-fn parse_args() -> (Option<PaletteChoice>, bool) {
+/// Parse CLI flags. Returns (parsed palette choice, run_settings flag, is_reset flag).
+fn parse_args() -> (Option<PaletteChoice>, bool, bool) {
     use crate::display::*;
 
     let args: Vec<String> = std::env::args().collect();
@@ -326,6 +326,7 @@ fn parse_args() -> (Option<PaletteChoice>, bool) {
     let mut from = None;
     let mut to = None;
     let mut run_settings = false;
+    let mut is_reset = false;
 
     let mut i = 1;
     while i < args.len() {
@@ -347,7 +348,7 @@ fn parse_args() -> (Option<PaletteChoice>, bool) {
                 std::process::exit(0);
             }
             "--pick" | "-p" => match interactive_pick() {
-                Some(c) => return (Some(c), false),
+                Some(c) => return (Some(c), false, false),
                 None => std::process::exit(0),
             },
             "--settings" | "-s" => {
@@ -367,20 +368,13 @@ fn parse_args() -> (Option<PaletteChoice>, bool) {
                         );
                     }
                 }
-                return (Some(c), false);
+                return (Some(c), false, false);
             }
             "--reset" => {
-                let c = PaletteChoice::Named("fire".to_string());
-                let default_settings = AnimSettings::default();
-                save_config(&c, &default_settings);
-                eprintln!(
-                    "  {ESC}[38;2;255;200;80m◆ Reset:{ESC}[0m \
-                     {ESC}[38;2;195;195;215mpalette reset to default (fire){ESC}[0m"
-                );
-                return (Some(c), false);
+                is_reset = true;
             }
             "--custom" => match interactive_custom() {
-                Some(c) => return (Some(c), false),
+                Some(c) => return (Some(c), false, false),
                 None => std::process::exit(0),
             },
             "--start" => {
@@ -420,7 +414,7 @@ fn parse_args() -> (Option<PaletteChoice>, bool) {
             );
             std::process::exit(1);
         };
-        return (Some(PaletteChoice::Custom { from: fc, to: tc }), false);
+        return (Some(PaletteChoice::Custom { from: fc, to: tc }), false, false);
     }
 
     if let Some(name) = color {
@@ -431,16 +425,31 @@ fn parse_args() -> (Option<PaletteChoice>, bool) {
             );
             std::process::exit(1);
         }
-        return (Some(PaletteChoice::Named(name)), false);
+        return (Some(PaletteChoice::Named(name)), false, false);
     }
 
-    (None, run_settings)
+    (None, run_settings, is_reset)
 }
 
 /// Resolve the final (palette choice, animation settings) pair for this run.
 pub fn resolve_choice() -> (PaletteChoice, AnimSettings) {
-    let (saved_choice, mut settings) = load_config();
-    let (parsed_choice, run_settings) = parse_args();
+    let (saved_choice, saved_settings) = load_config();
+    let (parsed_choice, run_settings, is_reset) = parse_args();
+
+    if is_reset {
+        let c = PaletteChoice::Named("fire".to_string());
+        let default_settings = AnimSettings::default();
+        if !has_no_save() {
+            save_config(&c, &default_settings);
+        }
+        eprintln!(
+            "  {ESC}[38;2;255;200;80m◆ Reset:{ESC}[0m \
+             {ESC}[38;2;195;195;215mall settings reset to default (fire){ESC}[0m"
+        );
+        return (c, default_settings);
+    }
+
+    let mut settings = saved_settings;
 
     if run_settings {
         if let Some(new_settings) = interactive_settings(&settings) {
