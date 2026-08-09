@@ -74,24 +74,55 @@ enum CellColor {
     Rgb(u8, u8, u8),
 }
 
-fn render(buf: &mut String, grid: &[u8], cols: usize, rows: usize, palette: &Palette) {
+/// Render a frame with fire-erase semantics:
+/// - Cells with heat > 0  → fire color (overlays everything)
+/// - Cells with heat == 0 and burned → default bg (already erased by fire)
+/// - Cells with heat == 0 and NOT burned → skipped (original terminal content shows through)
+fn render(
+    buf: &mut String,
+    grid: &[u8],
+    burned: &[bool],
+    cols: usize,
+    rows: usize,
+    palette: &Palette,
+) {
+    use std::fmt::Write as _;
     buf.clear();
-    buf.push_str(ESC);
-    buf.push_str("[H");
 
-    let mut last: Option<CellColor> = None;
+    let mut last_color: Option<CellColor> = None;
+    let mut need_move = true;
+    let mut write_col = 0usize;
+    let mut write_row = 0usize;
+
     for y in 0..rows {
         for x in 0..cols {
-            let heat = grid[y * cols + x];
-            let color = if heat == 0 {
-                CellColor::Default
-            } else {
+            let idx = y * cols + x;
+            let heat = grid[idx];
+
+            if heat == 0 && !burned[idx] {
+                // Unburned, no heat — leave original terminal content alone.
+                need_move = true;
+                continue;
+            }
+
+            // This cell needs to be written. Position if needed.
+            if need_move || write_row != y || write_col != x {
+                let _ = write!(buf, "{ESC}[{};{}H", y + 1, x + 1);
+                last_color = None; // re-emit color after move
+                need_move = false;
+                write_row = y;
+                write_col = x;
+            }
+
+            let color = if heat > 0 {
                 let (r, g, b) = palette[heat as usize];
                 CellColor::Rgb(r, g, b)
+            } else {
+                // burned, heat == 0 — clear to default bg
+                CellColor::Default
             };
 
-            if last != Some(color) {
-                use std::fmt::Write as _;
+            if last_color != Some(color) {
                 match color {
                     CellColor::Default => {
                         let _ = write!(buf, "{ESC}[49m");
@@ -100,12 +131,44 @@ fn render(buf: &mut String, grid: &[u8], cols: usize, rows: usize, palette: &Pal
                         let _ = write!(buf, "{ESC}[48;2;{r};{g};{b}m");
                     }
                 }
-                last = Some(color);
+                last_color = Some(color);
+            }
+
+            buf.push(' ');
+            write_col += 1;
+        }
+    }
+
+    let _ = write!(buf, "{ESC}[0m");
+}
+
+/// Final pass: erase any cells that were never touched by fire.
+fn clear_unburned(buf: &mut String, burned: &[bool], cols: usize, rows: usize) {
+    use std::fmt::Write as _;
+    buf.clear();
+    let _ = write!(buf, "{ESC}[49m");
+    let mut need_move = true;
+    let mut write_col = 0usize;
+    let mut write_row = 0usize;
+
+    for y in 0..rows {
+        for x in 0..cols {
+            let idx = y * cols + x;
+            if burned[idx] {
+                need_move = true;
+                continue;
+            }
+            if need_move || write_row != y || write_col != x {
+                let _ = write!(buf, "{ESC}[{};{}H", y + 1, x + 1);
+                need_move = false;
+                write_row = y;
+                write_col = x;
             }
             buf.push(' ');
+            write_col += 1;
         }
-        buf.push('\n');
     }
+    let _ = write!(buf, "{ESC}[0m");
 }
 
 fn resize_grid(cols: usize, rows: usize, top_down: bool) -> Vec<u8> {
@@ -122,12 +185,16 @@ fn resize_grid(cols: usize, rows: usize, top_down: bool) -> Vec<u8> {
 pub fn burn(palette: &Palette, settings: &AnimSettings, interrupted: Arc<AtomicBool>) {
     let (mut cols, mut rows) = terminal_size();
     let mut grid = resize_grid(cols, rows, settings.direction);
+    // burned[i] = true once cell i has ever had heat > 0.
+    // Burned cells are actively cleared; unburned cells are left untouched
+    // so any existing terminal text shows through until fire reaches it.
+    let mut burned = vec![false; cols * rows];
     let mut rng = Rng::new();
 
     let stdout = io::stdout();
     let mut out = stdout.lock();
-    // Hide cursor + full clear (screen + scrollback) so no residual content
-    let _ = write!(out, "{ESC}[?25l{ESC}[0m{ESC}[H{ESC}[2J{ESC}[3J");
+    // Hide cursor only — do NOT clear the screen so existing content remains visible.
+    let _ = write!(out, "{ESC}[?25l");
 
     let start = Instant::now();
     let source_cool_at = MAX_DURATION.mul_f32(SOURCE_COOL_START);
@@ -151,6 +218,7 @@ pub fn burn(palette: &Palette, settings: &AnimSettings, interrupted: Arc<AtomicB
             cols = new_cols;
             rows = new_rows;
             grid = resize_grid(cols, rows, top_down);
+            burned = vec![false; cols * rows];
             frame.reserve(cols * rows * 8);
         }
 
@@ -239,7 +307,14 @@ pub fn burn(palette: &Palette, settings: &AnimSettings, interrupted: Arc<AtomicB
             }
         }
 
-        render(&mut frame, &grid, cols, rows, palette);
+        // Update burned mask: any cell with heat > 0 is permanently marked.
+        for (i, &h) in grid.iter().enumerate() {
+            if h > 0 {
+                burned[i] = true;
+            }
+        }
+
+        render(&mut frame, &grid, &burned, cols, rows, palette);
         let _ = out.write_all(frame.as_bytes());
         let _ = out.flush();
 
@@ -252,6 +327,11 @@ pub fn burn(palette: &Palette, settings: &AnimSettings, interrupted: Arc<AtomicB
 
         std::thread::sleep(frame_delay);
     }
+
+    // Final pass: erase any cells the fire never touched.
+    clear_unburned(&mut frame, &burned, cols, rows);
+    let _ = out.write_all(frame.as_bytes());
+    let _ = out.flush();
 
     let _ = write!(out, "{ESC}[?25h"); // always restore cursor
 }
