@@ -356,18 +356,6 @@ fn parse_args() -> (Option<PaletteChoice>, bool, bool) {
             }
             "--random" | "-r" => {
                 let c = random_palette_choice();
-                if let PaletteChoice::Named(ref name) = c {
-                    if let Some((_, display, _, _, _)) = NAMED_PALETTES
-                        .iter()
-                        .find(|(id, _, _, _, _)| *id == name.as_str())
-                    {
-                        eprintln!(
-                            "  {ESC}[38;2;255;200;80m◆ Random:{ESC}[0m \
-                             {ESC}[1;38;2;255;255;255m{display}{ESC}[0m  \
-                             {ESC}[38;2;95;95;115m({name}){ESC}[0m"
-                        );
-                    }
-                }
                 return (Some(c), false, false);
             }
             "--reset" => {
