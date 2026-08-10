@@ -74,7 +74,7 @@ pyroclear [OPTIONS]
 | Option | Description | Example |
 | :--- | :--- | :--- |
 | **`--start`** | Open the onboarding presentation & guide | `pyroclear --start` |
-| **`--settings`, `-s`** | Adjust FPS, wind direction, and flame height decay | `pyroclear --settings` |
+| **`--settings`, `-s`** | Adjust FPS, wind direction, animation durations, and flame height decay | `pyroclear --settings` |
 | **`--pick`, `-p`** | Interactive color palette picker with live swatches | `pyroclear --pick` |
 | **`--custom`** | TUI to save, name, manage and run custom gradients | `pyroclear --custom` |
 | **`--color <name>`** | Burn with a specific named palette (saves as default) | `pyroclear --color toxic` |
