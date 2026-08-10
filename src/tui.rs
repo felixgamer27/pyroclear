@@ -516,6 +516,18 @@ fn draw_settings(selected: usize, settings: &AnimSettings, (cols, rows): (usize,
                 _ => "Unknown speed",
             },
         ),
+        (
+            "Animation Duration   ",
+            match settings.duration {
+                0.1..0.5 => "0.1 - 0.5 seconds",
+                0.5..1.0 => "0.5 - 1 seconds",
+                1.0..2.0 => "1 - 2 seconds",
+                2.0..3.0 => "1 - 2 seconds",
+                3.0..4.0 => "1 - 2 seconds",
+                4.0..5.0 => "1 - 2 seconds",
+                _ => "Unknown value"
+            },
+        ),
     ];
 
     let start_row = 3u16;
@@ -578,7 +590,7 @@ pub fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
                 selected = selected.saturating_sub(1);
             }
             Key::Down => {
-                if selected < 4 {
+                if selected < 5 {
                     selected += 1;
                 }
             }
@@ -618,6 +630,13 @@ pub fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
                         };
                     }
                 }
+                5 => {
+                    settings.duration = if settings.duration > 0.2 {
+                        settings.duration - 0.1
+                    } else {
+                        0.1
+                    }
+                }
                 _ => {}
             },
             Key::Right => match selected {
@@ -654,6 +673,13 @@ pub fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
                         } else {
                             duration_options[0]
                         }
+                    }
+                }
+                5 => {
+                    settings.duration = if settings.duration < 5.0 {
+                        settings.duration + 0.1
+                    } else {
+                        0.1
                     }
                 }
                 _ => {}

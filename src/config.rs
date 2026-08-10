@@ -15,6 +15,7 @@ pub struct AnimSettings {
     pub wind: i32,       // -2..=2 (Strong Left → Strong Right); 0 = None
     pub height: i32,     // 0 = Low, 1 = Medium, 2 = High, 3 = Extreme
     pub direction: bool, // false = bottom-up (default), true = top-down
+    pub duration: f32,   // 1 = 1 seconds, 1.2 = 1.2 seconds .. 5 = 5 seconds
     pub flames_duration: f32,   // 0 = stops instantly, 1 = stops at the end of the animation
 }
 
@@ -25,6 +26,7 @@ impl Default for AnimSettings {
             wind: 0,
             height: 1,
             direction: false,
+            duration: 2.2,
             flames_duration: 0.38,
         }
     }
@@ -122,6 +124,11 @@ pub fn load_config() -> (Option<PaletteChoice>, AnimSettings) {
                         settings.direction = b;
                     }
                 }
+                "duration" =>  {
+                    if let Ok(f) = val.parse::<f32>() {
+                        settings.duration = f;
+                    }
+                }
                 "flames_duration" =>  {
                     if let Ok(f) = val.parse::<f32>() {
                         settings.flames_duration = f;
@@ -168,6 +175,7 @@ pub fn save_config(choice: &PaletteChoice, settings: &AnimSettings) {
     content.push_str(&format!("wind             = {}\n", settings.wind));
     content.push_str(&format!("height           = {}\n", settings.height));
     content.push_str(&format!("direction        = {}\n", settings.direction));
+    content.push_str(&format!("duration         = {}\n", settings.duration));
     content.push_str(&format!("flames_duration  = {}\n", settings.flames_duration));
     let _ = std::fs::write(path, content);
 }
