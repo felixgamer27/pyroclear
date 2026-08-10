@@ -197,7 +197,7 @@ pub fn burn(palette: &Palette, settings: &AnimSettings, interrupted: Arc<AtomicB
     let _ = write!(out, "{ESC}[?25l");
 
     let start = Instant::now();
-    let source_cool_at = MAX_DURATION.mul_f32(SOURCE_COOL_START);
+    let source_cool_at = MAX_DURATION.mul_f32(settings.duration);
     let mut frame = String::with_capacity(cols * rows * 8);
     let frame_delay = Duration::from_millis(1000 / settings.fps.max(1) as u64);
     let top_down = settings.direction;
