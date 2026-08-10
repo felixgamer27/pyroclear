@@ -11,7 +11,6 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const MAX_HEAT: u8 = 36;
 const STEPS_PER_FRAME: u32 = 2;
 const MAX_DURATION: Duration = Duration::from_millis(2200);
-const SOURCE_COOL_START: f32 = 0.38;
 const DIE_OUT_THRESHOLD: u8 = 2;
 
 // ── PRNG (xorshift64*) ────────────────────────────────────────────────
@@ -197,7 +196,7 @@ pub fn burn(palette: &Palette, settings: &AnimSettings, interrupted: Arc<AtomicB
     let _ = write!(out, "{ESC}[?25l");
 
     let start = Instant::now();
-    let source_cool_at = MAX_DURATION.mul_f32(settings.duration);
+    let source_cool_at = MAX_DURATION.mul_f32(settings.flames_duration);
     let mut frame = String::with_capacity(cols * rows * 8);
     let frame_delay = Duration::from_millis(1000 / settings.fps.max(1) as u64);
     let top_down = settings.direction;

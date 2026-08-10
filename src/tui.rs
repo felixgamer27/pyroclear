@@ -506,7 +506,7 @@ fn draw_settings(selected: usize, settings: &AnimSettings, (cols, rows): (usize,
         ),
         (
             "Fire Duration  ",
-            match settings.duration {
+            match settings.flames_duration {
                 0.10 => "Very fast",
                 0.20 => "Fast",
                 0.30 => "Normal",
@@ -610,8 +610,8 @@ pub fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
                     settings.direction = !settings.direction;
                 }
                 4 => {
-                    if let Some(idx) = duration_options.iter().position(|&x| x == settings.duration) {
-                        settings.duration = if idx > 0 {
+                    if let Some(idx) = duration_options.iter().position(|&x| x == settings.flames_duration) {
+                        settings.flames_duration = if idx > 0 {
                             duration_options[idx - 1]
                         } else {
                             duration_options[duration_options.len() - 1]
@@ -648,8 +648,8 @@ pub fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
                     settings.direction = !settings.direction;
                 }
                 4 => {
-                    if let Some(idx) = duration_options.iter().position(|&x| x == settings.duration) {
-                        settings.duration = if idx + 1 < duration_options.len() {
+                    if let Some(idx) = duration_options.iter().position(|&x| x == settings.flames_duration) {
+                        settings.flames_duration = if idx + 1 < duration_options.len() {
                             duration_options[idx + 1]
                         } else {
                             duration_options[0]
