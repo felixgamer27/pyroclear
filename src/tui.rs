@@ -504,6 +504,30 @@ fn draw_settings(selected: usize, settings: &AnimSettings, (cols, rows): (usize,
                 "Bottom → Top  (classic rising flames)"
             },
         ),
+        (
+            "Fire Duration  ",
+            match settings.flames_duration {
+                0.10 => "Very fast",
+                0.20 => "Fast",
+                0.30 => "Normal",
+                0.38 => "Reasonably normal (default)",
+                0.50 => "Slow",
+                0.70 => "Very slow",
+                _ => "Unknown speed",
+            },
+        ),
+        (
+            "Animation Duration   ",
+            match settings.duration {
+                0.1..0.5 => "0.1 - 0.5 seconds",
+                0.5..1.0 => "0.5 - 1 seconds",
+                1.0..2.0 => "1 - 2 seconds",
+                2.0..3.0 => "1 - 2 seconds",
+                3.0..4.0 => "1 - 2 seconds",
+                4.0..5.0 => "1 - 2 seconds",
+                _ => "Unknown value"
+            },
+        ),
     ];
 
     let start_row = 3u16;
@@ -555,6 +579,7 @@ pub fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
     let mut settings = current.clone();
     let mut selected = 0usize;
     let fps_options = [15, 30, 45, 60, 75, 90, 120];
+    let duration_options = [0.10, 0.20, 0.30, 0.38, 0.50, 0.70];
 
     loop {
         let size = terminal_size();
@@ -565,7 +590,7 @@ pub fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
                 selected = selected.saturating_sub(1);
             }
             Key::Down => {
-                if selected < 3 {
+                if selected < 5 {
                     selected += 1;
                 }
             }
@@ -596,6 +621,22 @@ pub fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
                 3 => {
                     settings.direction = !settings.direction;
                 }
+                4 => {
+                    if let Some(idx) = duration_options.iter().position(|&x| x == settings.flames_duration) {
+                        settings.flames_duration = if idx > 0 {
+                            duration_options[idx - 1]
+                        } else {
+                            duration_options[duration_options.len() - 1]
+                        };
+                    }
+                }
+                5 => {
+                    settings.duration = if settings.duration > 0.2 {
+                        settings.duration - 0.1
+                    } else {
+                        0.1
+                    }
+                }
                 _ => {}
             },
             Key::Right => match selected {
@@ -624,6 +665,22 @@ pub fn interactive_settings(current: &AnimSettings) -> Option<AnimSettings> {
                 }
                 3 => {
                     settings.direction = !settings.direction;
+                }
+                4 => {
+                    if let Some(idx) = duration_options.iter().position(|&x| x == settings.flames_duration) {
+                        settings.flames_duration = if idx + 1 < duration_options.len() {
+                            duration_options[idx + 1]
+                        } else {
+                            duration_options[0]
+                        }
+                    }
+                }
+                5 => {
+                    settings.duration = if settings.duration < 5.0 {
+                        settings.duration + 0.1
+                    } else {
+                        0.1
+                    }
                 }
                 _ => {}
             },
