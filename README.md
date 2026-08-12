@@ -138,6 +138,7 @@ You can change them by running:
 pyroclear -s
 ```
 or by editing the config file (See the [formatting documentation](formatting.md))
+
 ---
 
 ## Performance
