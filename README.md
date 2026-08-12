@@ -133,6 +133,11 @@ Your preferences are saved in:
 - **Unix**: `~/.config/pyroclear/config.toml` (and `custom_palettes.toml` for custom palettes)
 - **Windows**: `%USERPROFILE%\.config\pyroclear\config.toml` (and `custom_palettes.toml` for custom palettes, resolved using `$HOME`)
 
+You can change them by running:
+```bash
+pyroclear -s
+```
+or by editing the config file (See the [formatting documentation](formatting.md))
 ---
 
 ## Performance
