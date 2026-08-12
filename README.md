@@ -41,6 +41,32 @@ cargo build --release
 cargo install --path .
 ```
 
+Install via NixOS Flakes:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+    pyroclear.url = "github:shreyanth-sureshkrishnaa/pyroclear";
+  };
+
+  outputs = {pyroclear, nixpkgs, ...}: {
+    nixosConfigurations = {
+      example = nixpkgs.lib.nixosSystem rec {
+        # We support: aarch64-linux, x86_64-linux
+        system = "x86_64-linux";
+
+        modules = [
+          {
+            environment.systemPackages = [pyroclear.packages.${system}.default];
+          }
+        ];
+      };
+    };
+  };
+}
+```
+
 ### Wire it up as `clear`
 
 **Bash / Zsh (Linux, macOS, Git Bash on Windows)**
